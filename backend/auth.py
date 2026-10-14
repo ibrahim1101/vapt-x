@@ -51,13 +51,20 @@ async def establish_session(user, response):
     return public_user(user)
 
 
+def local_cookie_mode():
+    """Allow insecure cookies only for explicit loopback-only local development."""
+    from urllib.parse import urlsplit
+    url = urlsplit(os.environ.get("FRONTEND_URL", ""))
+    return os.environ.get("VAPTX_LOCAL_HTTP") == "1" and url.scheme == "http" and url.hostname in {"localhost", "127.0.0.1"}
+
+
 def set_cookies(response, uid, sid):
     for name, value, age, http_only in [
         ("access_token", create_access_token(uid, sid), 1800, True),
         ("refresh_token", create_refresh_token(uid, sid), 604800, True),
         ("csrf", secrets.token_urlsafe(32), 604800, False),
     ]:
-        response.set_cookie(name, value, httponly=http_only, secure=True, samesite="lax", max_age=age, path="/")
+        response.set_cookie(name, value, httponly=http_only, secure=not local_cookie_mode(), samesite="lax", max_age=age, path="/")
 
 
 @router.post("/auth/register")
@@ -116,7 +123,7 @@ async def refresh(request: Request, response: Response):
 async def logout(response: Response, user=Depends(get_current_user)):
     await db.sessions.update_one({"_id": user["_sid"]}, {"$set": {"revoked": True}})
     for key in ("access_token", "refresh_token", "csrf"):
-        response.delete_cookie(key, path="/", secure=True, samesite="lax")
+        response.delete_cookie(key, path="/", secure=not local_cookie_mode(), samesite="lax")
     return {"ok": True}
 
 
