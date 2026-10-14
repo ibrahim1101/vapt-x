@@ -3,7 +3,7 @@ services:
     image: mongo:7
     restart: unless-stopped
     ports:
-      - "127.0.0.1:27017:27017"
+      - "127.0.0.1:${VAPTX_MONGO_PORT:-27018}:27017"
     volumes:
       - vaptx_mongo_data:/data/db
     healthcheck:
