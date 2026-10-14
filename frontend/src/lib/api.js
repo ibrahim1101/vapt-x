@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { apiBaseUrl } from './api-config';
 
-export const api = axios.create({ baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`, withCredentials: true });
+export const api = axios.create({ baseURL: apiBaseUrl(process.env.REACT_APP_BACKEND_URL), withCredentials: true });
 api.interceptors.request.use(config => {
   const csrf = document.cookie.split('; ').find(c => c.startsWith('csrf='))?.split('=').slice(1).join('=');
   if (csrf) config.headers['X-CSRF-Token'] = decodeURIComponent(csrf);

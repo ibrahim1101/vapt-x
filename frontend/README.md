@@ -1,70 +1,33 @@
-# Getting Started with Create React App
+# VAPT-X frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+The React workspace uses Create React App with CRACO, Tailwind CSS, and an Axios API client. Development and production builds do not require Emergent services, visual editing packages, or external session recording.
 
-## Available Scripts
+## Local development
 
-In the project directory, you can run:
+Use Yarn 1.22.22 (the version pinned in `package.json`). From this directory:
 
-### `npm start`
+```sh
+yarn install
+yarn start
+```
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+For a separate local backend, create `frontend/.env.local` with:
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```dotenv
+REACT_APP_BACKEND_URL=http://localhost:8000
+```
 
-### `npm test`
+The client appends `/api` to this origin. If the variable is absent or blank, it uses `/api` on the frontend's own origin; configure your reverse proxy to forward that path to FastAPI. Trailing slashes are normalized. Environment variables are embedded at build time, so restart development or rebuild after changing them.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Authentication uses cookies. Configure backend CORS for the exact frontend origin and use matching hostnames (for example, `localhost` on both services).
 
-### `npm run build`
+## Verification
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```sh
+yarn test --watchAll=false --runInBand
+yarn build
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+The API configuration regression tests cover same-origin fallback and explicit backend URL normalization. The production bundle is written to `build/` and should be served by a static web server with SPA fallback. The development server is not a production server.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Optional development compiler health endpoints are enabled with `ENABLE_HEALTH_CHECK=true`; these are independent of the backend's health checks.
