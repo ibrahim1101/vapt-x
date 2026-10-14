@@ -1,0 +1,108 @@
+{
+  "project_name": "VAPT-X",
+  "app_type": "enterprise_secops_dashboard",
+  "design_archetype": "TACTICAL_CYBER_PRECISION",
+  "visual_theme": {
+    "default_mode": "dark",
+    "mode_switch_supported": true,
+    "dark_theme": {
+      "background_page": "#0A0D14",
+      "background_card": "#111622",
+      "background_subtle": "#171D2D",
+      "border_color": "#232D42",
+      "text_primary": "#F1F5F9",
+      "text_secondary": "#94A3B8",
+      "text_muted": "#64748B",
+      "brand_primary": "#00E5FF",
+      "brand_accent": "#10B981",
+      "critical_red": "#FF3B30",
+      "high_orange": "#F97316",
+      "medium_yellow": "#EAB308",
+      "low_blue": "#3B82F6",
+      "info_cyan": "#06B6D4"
+    },
+    "light_theme": {
+      "background_page": "#F8FAFC",
+      "background_card": "#FFFFFF",
+      "background_subtle": "#F1F5F9",
+      "border_color": "#E2E8F0",
+      "text_primary": "#0F172A",
+      "text_secondary": "#475569",
+      "text_muted": "#64748B",
+      "brand_primary": "#0284C7",
+      "brand_accent": "#059669",
+      "critical_red": "#DC2626",
+      "high_orange": "#EA580C",
+      "medium_yellow": "#CA8A04",
+      "low_blue": "#2563EB",
+      "info_cyan": "#0891B2"
+    }
+  },
+  "typography": {
+    "font_family_heading": "JetBrains Mono, SF Mono, Menlo, monospace",
+    "font_family_body": "Plus Jakarta Sans, Inter, system-ui, sans-serif",
+    "font_family_code": "Fira Code, JetBrains Mono, monospace",
+    "heading_styles": {
+      "h1": "text-3xl sm:text-4xl font-mono font-bold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-mono font-semibold tracking-tight",
+      "h3": "text-xl font-mono font-semibold",
+      "h4": "text-lg font-mono font-medium"
+    },
+    "body_styles": {
+      "large": "text-base font-sans font-normal leading-relaxed",
+      "default": "text-sm font-sans font-normal leading-normal",
+      "small": "text-xs font-sans font-normal text-slate-400"
+    }
+  },
+  "layout_and_spacing": {
+    "container_padding": "p-4 sm:p-6 lg:p-8",
+    "grid_density": "High density, zero wasted space",
+    "card_radius": "rounded-lg",
+    "borders": "1px solid border-slate-800 dark:border-slate-800 light:border-slate-200",
+    "glassmorphism": "backdrop-blur-md bg-slate-900/80 border border-slate-800/80"
+  },
+  "key_features_to_build": [
+    "Security Command Center Dashboard with Recharts severity breakdown & activity trends",
+    "Projects & Engagement Lifecycle (Active scope, Authorization status, ROE badges)",
+    "Authorized Scope & Asset Inventory with interactive attack surface map/graph",
+    "Scan Launcher & Real-time Live Scan Console (with live terminal log streams)",
+    "Unified Vulnerability Findings Table (CVSS v3.1, CWE, CVE tags, SLA filters, drawer details)",
+    "SHA-256 Chain-of-Custody Evidence Vault with cryptographic verification state",
+    "Automated Report Builder with executive summary & one-click PDF export",
+    "Remediation Kanban & Retest Workflows with AI Fix Suggestions",
+    "Assessment Side-by-Side Comparison Tool",
+    "AI Security Copilot Chat Panel (Claude integration for exploit analysis & mitigation)",
+    "Command Palette (Cmd+K) & Global Search across findings, assets, and tasks",
+    "Immutable Audit Log Viewer with JSON details & actor tracking"
+  ],
+  "components_and_ui_library": {
+    "base_path": "src/components/ui/*.jsx",
+    "shadcn_primitives_available": [
+      "accordion", "alert", "alert-dialog", "avatar", "badge", "breadcrumb", "button",
+      "calendar", "card", "checkbox", "command", "dialog", "drawer", "dropdown-menu",
+      "form", "input", "label", "popover", "progress", "scroll-area", "select", "sheet",
+      "skeleton", "slider", "sonner", "switch", "table", "tabs", "textarea", "tooltip"
+    ],
+    "icons": "lucide-react",
+    "charts": "recharts"
+  },
+  "media_assets": {
+    "hero_secops": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "cyber_dashboard": "https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "security_status": "https://images.unsplash.com/photo-1751448555253-f39c06e29d82?crop=entropy&cs=srgb&fm=jpg&q=85"
+  },
+  "accessibility_and_testing": {
+    "contrast_ratio": "APCA high contrast dark mode compliance (minimum 4.5:1 for standard text)",
+    "data_testid_convention": "kebab-case, role-based, e.g. data-testid='nav-command-palette-button', data-testid='findings-filter-severity'",
+    "hover_contrast_rule": "Always explicitly define background and text color on hover state"
+  },
+  "instructions_to_main_agent": [
+    "Use standard React JS syntax (.jsx or .js), NOT TypeScript.",
+    "Implement both Dark and Light theme toggle, defaulting to Dark tactical mode.",
+    "Ensure all interactive items include data-testid attributes for E2E testing.",
+    "Do not use transparent backgrounds for dropdowns, popovers, or modals.",
+    "Integrate Sonner for toast notifications on scan starts, export actions, and severity updates.",
+    "Ensure tables are sortable, paginated, and include filter badges for severity (Critical, High, Medium, Low, Info).",
+    "Add Cmd+K Command Palette triggerable anywhere on the workspace."
+  ]
+}
