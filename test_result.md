@@ -101,3 +101,46 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "VAPT-X full core authorized assessment lifecycle, real safe/Nmap scans and five report parsers; no fake findings; organization RBAC; evidence, PDF, remediation, retest, Claude."
+backend:
+  - task: "Complete authenticated core workflow and tenant isolation"
+    implemented: true
+    working: NA
+    file: "backend/auth.py, repository.py, workflow.py, scanners.py, importers.py, evidence.py, reporting.py, analyst.py"
+    stuck_count: 0
+    priority: high
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: main
+        comment: "All core routes implemented. Actual owner training safe scan completed with five genuine observations, PDF generated via authenticated API. Full functional and denial matrix not yet tested."
+frontend:
+  - task: "Connected desktop and mobile workspace lifecycle"
+    implemented: true
+    working: NA
+    file: "frontend/src/App.js and components/workspace-*.jsx, dashboard.jsx, access.jsx"
+    stuck_count: 0
+    priority: high
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: main
+        comment: "Production build passes. Desktop/mobile login smoke screenshots show no overflow. Need full authenticated browser flows and all pages at 390px."
+metadata:
+  created_by: main
+  version: '1.0'
+  test_sequence: 0
+  run_ui: true
+test_plan:
+  current_focus:
+    - "Full lifecycle and denial matrix"
+    - "Real Nmap and five import formats"
+    - "Evidence PDF retest comparison Claude multi-turn and persistence"
+    - "Authenticated desktop/mobile UI"
+  stuck_tasks: []
+  test_all: true
+  test_priority: high_first
+agent_communication:
+  - agent: main
+    message: "Use actual owner credentials from memory/test_credentials.md and current preview URL from frontend/.env. Origin + X-CSRF-Token + session cookies required for mutations; X-Org-Id for tenant. Never scan unrelated third parties. Use training://local managed target. Owner workspace contains one real training assessment. Please create durable pytest regressions under backend/tests."
