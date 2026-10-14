@@ -2,7 +2,7 @@ import os
 import secrets
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from pymongo.errors import DuplicateKeyError
 from core import (db, BaseDocument, clean, iso, now, new_id, hash_password, verify_password,
                   create_access_token, create_refresh_token, decode_token, get_current_user, get_ctx, Ctx, audit, ROLES)
@@ -14,6 +14,13 @@ class Credentials(BaseModel):
     email: EmailStr
     password: str = Field(min_length=10, max_length=72)
     name: str = Field(default="", max_length=100)
+
+    @field_validator("password")
+    @classmethod
+    def bcrypt_byte_limit(cls, value):
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password must not exceed 72 UTF-8 bytes")
+        return value
 
 
 class OrgInput(BaseModel):

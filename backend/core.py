@@ -10,6 +10,7 @@ import jwt
 from dotenv import load_dotenv
 from fastapi import HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorClient
+from config import Settings
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 from typing import Annotated
 import asyncio
@@ -37,8 +38,9 @@ class DomainDocument(BaseDocument):
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-client = AsyncIOMotorClient(os.environ["MONGO_URL"])
-db = client[os.environ["DB_NAME"]]
+settings = Settings.from_env(os.environ)
+client = AsyncIOMotorClient(settings.mongo_url, serverSelectionTimeoutMS=settings.mongo_timeout_ms, connectTimeoutMS=settings.mongo_timeout_ms)
+db = client[settings.db_name]
 EVIDENCE_DIR = ROOT_DIR / "storage" / "evidence"
 EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 JWT_ALG = "HS256"

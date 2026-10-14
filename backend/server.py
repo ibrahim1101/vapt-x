@@ -1,10 +1,12 @@
-import os
+import logging
 import secrets
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
-from core import db, client, iso
+from core import db, client, iso, settings
+from pymongo.errors import PyMongoError
+from request_limits import RequestBodyLimitMiddleware
 from auth import router as auth_router, seed_admin
 from workflow import router as workflow_router
 from evidence import router as evidence_router
@@ -14,17 +16,21 @@ from analyst import router as analyst_router
 
 @asynccontextmanager
 async def lifespan(app):
-    await seed_admin()
-    for collection in ('projects', 'scopes', 'assets', 'assessments', 'jobs', 'findings', 'tasks', 'evidence', 'evidence_chunks', 'reports', 'report_files', 'audit_events', 'ai_sessions'):
-        await db[collection].create_index([('org_id', 1), ('created_at', -1)])
-    await db.evidence_chunks.create_index([('org_id', 1), ('evidence_id', 1), ('index', 1)], unique=True)
-    await db.jobs.update_many({'status': {'$in': ['queued', 'running']}}, {'$set': {'status': 'interrupted', 'error': 'Worker restarted before completion; run again.', 'finished_at': iso()}})
-    yield
-    client.close()
+    try:
+        await db.command('ping')
+        await seed_admin()
+        for collection in ('projects', 'scopes', 'assets', 'assessments', 'jobs', 'findings', 'tasks', 'evidence', 'evidence_chunks', 'reports', 'report_files', 'audit_events', 'ai_sessions'):
+            await db[collection].create_index([('org_id', 1), ('created_at', -1)])
+        await db.evidence_chunks.create_index([('org_id', 1), ('evidence_id', 1), ('index', 1)], unique=True)
+        await db.jobs.update_many({'status': {'$in': ['queued', 'running']}}, {'$set': {'status': 'interrupted', 'error': 'Worker restarted before completion; run again.', 'finished_at': iso()}})
+        logging.getLogger(__name__).info('VAPT-X database initialization completed')
+        yield
+    finally:
+        client.close()
 
 
 app = FastAPI(title='VAPT-X API', version='1.0.0', lifespan=lifespan)
-origin = os.environ['FRONTEND_URL'].rstrip('/')
+origin = settings.frontend_origin
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=[origin], allow_methods=['GET', 'POST', 'PATCH', 'PUT', 'DELETE'], allow_headers=['Content-Type', 'X-CSRF-Token', 'X-Org-Id'])
 
 
@@ -37,8 +43,6 @@ async def request_security(request: Request, call_next):
             csrf = request.cookies.get('csrf', '')
             if not csrf or not secrets.compare_digest(csrf, request.headers.get('x-csrf-token', '')):
                 return JSONResponse({'detail': 'CSRF verification failed'}, status_code=403)
-        if int(request.headers.get('content-length', '0')) > 3_000_000:
-            return JSONResponse({'detail': 'Request too large; use chunked evidence upload'}, status_code=413)
     response = await call_next(request)
     if not request.url.path.startswith('/api/lab/'):
         response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -48,9 +52,20 @@ async def request_security(request: Request, call_next):
     return response
 
 
+app.add_middleware(RequestBodyLimitMiddleware)
+
+
+@app.get('/api/live')
+async def live():
+    return {'status': 'ok', 'service': 'VAPT-X'}
+
+
 @app.get('/api/health')
 async def health():
-    await db.command('ping')
+    try:
+        await db.command('ping')
+    except PyMongoError:
+        return JSONResponse({'status': 'unavailable', 'service': 'VAPT-X'}, status_code=503)
     return {'status': 'ok', 'service': 'VAPT-X'}
 
 

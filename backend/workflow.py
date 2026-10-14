@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+from importlib.util import find_spec
 from datetime import datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -82,7 +83,7 @@ class TaskUpdate(BaseModel):
 @router.get("/capabilities")
 async def capabilities(ctx=Depends(get_ctx)):
     ctx.require("read")
-    return {"safe": True, "nmap": bool(shutil.which(os.environ["NMAP_BINARY"])), "imports": ["nmap", "nuclei", "semgrep", "trivy", "zap"], "ai": bool(os.environ.get("EMERGENT_LLM_KEY")), "limitations": ["Nmap uses TCP connect on four web ports only; no exploit scripts.", "Remote private networks are blocked. Only the managed training target may use loopback.", "Imports are scanner-authored, unverified evidence, not a fresh scan.", "Interrupted jobs are marked interrupted after a worker restart; re-run manually."]}
+    return {"safe": True, "nmap": bool(shutil.which(os.environ["NMAP_BINARY"])), "imports": ["nmap", "nuclei", "semgrep", "trivy", "zap"], "ai": bool(os.environ.get("ANTHROPIC_API_KEY")) and find_spec("anthropic") is not None, "limitations": ["Nmap uses TCP connect on four web ports only; no exploit scripts.", "Remote private networks are blocked. Only the managed training target may use loopback.", "Imports are scanner-authored, unverified evidence, not a fresh scan.", "Interrupted jobs are marked interrupted after a worker restart; re-run manually."]}
 
 
 @router.get("/workspace")
