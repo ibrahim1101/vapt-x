@@ -84,6 +84,14 @@ class MFAPersistenceTests(unittest.TestCase):
                         post('auth/mfa/disable',{'current_password':'changed-password','mfa_code':replacement['recovery_codes'][0]})
                         assert not client.get('/api/auth/mfa').json()['enabled']
                         assert client.post('/api/auth/login',headers=origin,json={'email':'mfa@example.com','password':'changed-password'}).status_code==200
+                        history=client.get('/api/auth/security-events').json()
+                        actions={row['action'] for row in history['items']}
+                        assert {'mfa.enabled','mfa.disabled','mfa.recovery_codes_replaced','password.changed'}<=actions,actions
+                        assert all(set(row)=={'id','action','created_at'} for row in history['items'])
+                        assert all(value not in json.dumps(history) for value in recovery)
+                        assert client.post('/api/auth/register',headers=origin,json={'email':'foreign@example.com','password':'integration-password'}).status_code==200
+                        foreign=client.get('/api/auth/security-events').json()
+                        assert foreign['total']==1 and foreign['items'][0]['action']=='session.created'
                         mongo[database].mfa_attempts.insert_one({'_id':'budget-fixture','count':0,'expires_at':mfa.now()+mfa.timedelta(minutes=15)})
                         async def budget_race():return await asyncio.gather(*(mfa.charge_attempt('budget-fixture') for _ in range(24)),return_exceptions=True)
                         budget=client.portal.call(budget_race)

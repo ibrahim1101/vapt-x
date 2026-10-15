@@ -13,7 +13,7 @@ let refreshing;
 api.interceptors.response.use(r => r, async error => {
   const original = error.config;
   const retryableUrl = typeof original?.url === 'string' && (
-    !original.url.startsWith('/auth/') || /^\/auth\/sessions(?:\/|\?|$)/.test(original.url)
+    !original.url.startsWith('/auth/') || /^\/auth\/(?:sessions|mfa|password|security-events)(?:\/|\?|$)/.test(original.url)
   );
   if (error.response?.status === 401 && retryableUrl && !original._retried) {
     original._retried = true;

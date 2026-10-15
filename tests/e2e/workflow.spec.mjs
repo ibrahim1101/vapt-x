@@ -412,5 +412,9 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await submit(page,'/auth/mfa/disable');
   await page.getByTestId('mfa-done').click();
   await expect(page.getByTestId('mfa-status')).toContainText('Not enabled');
+  const historyLoaded=page.waitForResponse(r=>r.url().includes('/api/auth/security-events')&&r.request().method()==='GET');
+  await page.getByTestId('refresh-account-history').click();
+  expect((await historyLoaded).ok()).toBeTruthy();
+  await expect(page.getByTestId('account-security-events')).toContainText('mfa disabled');
   expect(pageErrors).toEqual([]);
 });

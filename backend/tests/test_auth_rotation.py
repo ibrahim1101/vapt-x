@@ -124,7 +124,7 @@ class RefreshRotationTests(unittest.IsolatedAsyncioTestCase):
         from http.cookies import SimpleCookie
         from core import decode_token
         response = Response()
-        with patch.object(auth, 'db', self.db), patch.object(auth, 'insert_identity', AsyncMock()) as insert:
+        with patch.object(auth, 'db', self.db), patch.object(auth, 'account_event', AsyncMock()), patch.object(auth, 'insert_identity', AsyncMock()) as insert:
             result = await auth.refresh(self.request(), response)
         self.assertEqual(result['id'], 'alice')
         self.assertEqual(result['email'], 'alice@example.com')

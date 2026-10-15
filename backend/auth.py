@@ -1,7 +1,8 @@
 import os
 import secrets
+import logging
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from pymongo.errors import DuplicateKeyError
 from pymongo import ReturnDocument
@@ -55,11 +56,33 @@ async def insert_identity(collection, fields):
     return doc.model_dump()
 
 
+async def account_event(user_id, action):
+    # Metadata only. A history outage must not strand an account after credential rotation.
+    try:
+        await insert_identity("account_events", {"user_id":user_id,"action":action,"created_at":iso()})
+    except Exception:
+        logging.getLogger(__name__).warning("Account security history write failed")
+
+
+@router.get("/auth/security-events")
+async def security_events(offset:int=Query(default=0,ge=0,le=1_000_000),
+    limit:int=Query(default=25,ge=1,le=100),user=Depends(get_current_user)):
+    if user.get("_token_scopes") is not None: raise HTTPException(403,"Use a browser session to view account security history")
+    query={"user_id":user["id"]}
+    total=await db.account_events.count_documents(query)
+    rows=await db.account_events.find(query,{"_id":1,"action":1,"created_at":1}).sort(
+        [("created_at",-1),("_id",-1)]).skip(offset).limit(limit).to_list(limit)
+    return {"items":[{"id":str(row["_id"]),"action":row["action"],"created_at":row["created_at"]} for row in rows],
+        "total":total,"offset":offset,"limit":limit,"has_more":offset+len(rows)<total,
+        "notice":"Your account events across organizations. Historical events before this feature are unavailable. History recording is best effort and is not a tamper-proof audit log."}
+
+
 async def seed_admin():
     await db.users.create_index("email", unique=True)
     await db.memberships.create_index([("org_id", 1), ("user_id", 1)], unique=True)
     await db.auth_attempts.create_index("expires_at", expireAfterSeconds=0)
     await db.mfa_attempts.create_index("expires_at", expireAfterSeconds=0)
+    await db.account_events.create_index([("user_id",1),("created_at",-1),("_id",-1)])
     email = os.environ["ADMIN_EMAIL"].lower().strip()
     if not await db.users.find_one({"email": email}):
         await insert_identity("users", {"email": email, "name": "Workspace owner", "password_hash": hash_password(os.environ["ADMIN_PASSWORD"]), "platform_role": "platform_admin", "created_at": iso()})
@@ -69,6 +92,7 @@ async def establish_session(user, response):
     sid = new_id()
     await insert_identity("sessions", {"id": sid, "user_id": user["id"], "credential_version": user.get("credential_version", 0), "revoked": False, "created_at": iso(), "expires_at": iso(now() + timedelta(days=7))})
     set_cookies(response, user["id"], sid)
+    await account_event(user["id"], "session.created")
     return public_user(user)
 
 
@@ -158,6 +182,7 @@ async def logout(response: Response, user=Depends(get_current_user)):
     await db.sessions.update_one({"_id": user["_sid"]}, {"$set": {"revoked": True}})
     for key in ("access_token", "refresh_token", "csrf"):
         response.delete_cookie(key, path="/", secure=not local_cookie_mode(), samesite="lax")
+    await account_event(user["id"], "session.logged_out")
     return {"ok": True}
 
 
@@ -191,6 +216,7 @@ async def change_password(body: PasswordChange, response: Response, user=Depends
         raise HTTPException(409, "Credentials changed. Sign in again.")
     await db.auth_attempts.delete_many({"email": key})
     await renew_credentials(changed, response)
+    await account_event(user["id"], "password.changed")
     return {"ok": True, "notice": "Password changed. Previous sessions and API tokens are invalidated."}
 
 
@@ -224,6 +250,7 @@ async def revoke_other_sessions(user=Depends(get_current_user)):
          "revoked": False, "expires_at": {"$gt": iso()}},
         {"$set": {"revoked": True}},
     )
+    await account_event(user["id"], "sessions.others_revoked")
     return {"revoked_count": result.modified_count}
 
 
@@ -240,6 +267,7 @@ async def revoke_session(session_id: str, response: Response, user=Depends(get_c
     if current:
         for key in ("access_token", "refresh_token", "csrf"):
             response.delete_cookie(key, path="/", secure=not local_cookie_mode(), samesite="lax")
+    await account_event(user["id"], "session.revoked")
     return {"ok": True, "current": current}
 
 

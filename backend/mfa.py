@@ -146,13 +146,14 @@ async def confirm(body:Confirmation,response:Response,user=Depends(get_current_u
                  'mfa_recovery_hashes':hashes,'mfa_enabled_at':iso()},'$unset':{'mfa_pending':''},'$inc':{'credential_version':1}},
         return_document=ReturnDocument.AFTER)
     if not changed: raise HTTPException(409,'Setup changed. Start again.')
-    await finish(changed,response)
+    await finish(changed,response,'mfa.enabled')
     return {'enabled':True,'recovery_codes':codes,'notice':'Save these one-use recovery codes now. Previous sessions and API tokens are invalidated. Wait for a new authenticator code before using it again.'}
 
-async def finish(document,response):
-    from auth import renew_credentials
+async def finish(document,response,action):
+    from auth import renew_credentials, account_event
     await renew_credentials(document,response)
     await db.mfa_attempts.delete_one({'_id':str(document['_id'])})
+    await account_event(str(document['_id']),action)
 
 @router.post('/disable')
 async def disable(body:Reauthenticate,response:Response,user=Depends(get_current_user)):
@@ -161,7 +162,7 @@ async def disable(body:Reauthenticate,response:Response,user=Depends(get_current
         'mfa_enabled':True,**version_query(document)},
         {'$set':{'mfa_enabled':False},'$unset':{'mfa_secret':'','mfa_pending':'','mfa_recovery_hashes':'','mfa_last_counter':''},'$inc':{'credential_version':1}},return_document=ReturnDocument.AFTER)
     if not changed: raise HTTPException(409,'Credentials changed; reload settings')
-    await finish(changed,response)
+    await finish(changed,response,'mfa.disabled')
     return {'enabled':False,'notice':'MFA disabled. Previous sessions and API tokens are invalidated.'}
 
 @router.post('/recovery-codes')
@@ -172,5 +173,5 @@ async def regenerate(body:Reauthenticate,response:Response,user=Depends(get_curr
         'mfa_enabled':True,**version_query(document)},
         {'$set':{'mfa_recovery_hashes':hashes},'$inc':{'credential_version':1}},return_document=ReturnDocument.AFTER)
     if not changed: raise HTTPException(409,'Credentials changed; reload settings')
-    await finish(changed,response)
+    await finish(changed,response,'mfa.recovery_codes_replaced')
     return {'enabled':True,'recovery_codes':codes,'notice':'Shown once. All previous recovery codes, sessions and API tokens are invalidated.'}
