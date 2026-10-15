@@ -1,7 +1,7 @@
 from io import BytesIO
 from html import escape
 from collections import Counter
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Response, HTTPException
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT
@@ -82,9 +82,19 @@ async def report(assessment_id: str, ctx=Depends(get_ctx)):
 async def download_report(report_id: str, ctx=Depends(get_ctx)):
     ctx.require("read")
     repo = Repository(ctx)
-    await repo.get("reports", report_id)
+    record = await repo.get("reports", report_id)
     files = await repo.list("report_files", {"report_id": report_id})
     import base64
-    raw = base64.b64decode(files[0]["data"])
+    from binascii import Error as Base64Error
+    if not files:
+        raise HTTPException(404, "Report file not found")
+    if len(files) != 1:
+        raise HTTPException(409, "Report file integrity verification failed")
+    try:
+        raw = base64.b64decode(files[0]["data"], validate=True)
+    except (KeyError, TypeError, ValueError, Base64Error):
+        raise HTTPException(409, "Report file integrity verification failed") from None
+    if sha256_hex(raw) != record.get("sha256"):
+        raise HTTPException(409, "Report file integrity verification failed")
     await audit(ctx, "report.downloaded", "reports", report_id)
     return Response(raw, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="VAPT-X-{report_id[:8]}.pdf"'})

@@ -23,7 +23,7 @@ Priority order:
 1. Exercise tenant isolation and role enforcement on every resource, including downloads, AI sessions and jobs.
 2. Fix unpaginated repository limits: workspace, reports and comparisons currently default to 1,000 documents although imports allow 2,000 findings. Never silently present truncated coverage as complete.
 3. Validate scanner scope, DNS pinning, redirect blocking, time windows and resource limits using synthetic fixtures and the owned training target.
-4. Add report-download integrity/missing-file handling; validate large reports and evidence completion races.
+4. Report-download integrity/missing-file handling now has regression coverage; validate large reports and evidence completion races next.
 5. Complete assessment cancellation and bounded job cleanup; enforce concurrency across workers before enabling more than one API worker.
 6. Add import fixtures for every supported format; make import attribution, malformed-input errors and partial failures explicit.
 7. Add project edits/archive and genuine asset search/pagination; preserve historical references.

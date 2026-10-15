@@ -43,3 +43,13 @@ Observed checks:
 - Docker, Mongo-backed integration, Python 3.11 execution, Windows, browser workflows, external scans and live AI: not executed locally. CI results must be recorded separately.
 
 Next session: verify CI integration; complete frontend lock/install/build; execute the controlled core workflow; address refresh races, parser fixtures, report checksum verification and query truncation before expansion. No deployment or release performed.
+
+## 2026-10-15 UTC — publication, CI, report integrity follow-up
+
+Published three commits via the GitHub connector after shell push lacked credentials. Draft [PR #1](https://github.com/ibrahim1101/vapt-x/pull/1) targets `dev/vapt-x-stabilization`. Remote batch head: `3a505e3390821811bff7426af54c8fb18f761f72`; local original commits have equivalent trees but different commit metadata.
+
+[Backend CI run 38663613928](https://github.com/ibrahim1101/vapt-x/actions/runs/38663613928) passed on Python 3.11 and 3.12. Python 3.11 logs confirm **15 passed** including disposable MongoDB registration, organization membership/persistence, refresh rotation, logout and re-login. This is API integration evidence, not browser/full assessment validation.
+
+Added strict base64 parsing, missing/duplicate-file handling and stored SHA-256 comparison before PDF downloads. A regression checks successful downloads plus missing, malformed, duplicate and tampered payloads; failed downloads do not emit successful download audit events. Existing organization-scoped report/file retrieval is retained.
+
+Follow-up local suite: `cd backend && /tmp/vaptx-venv/bin/python -m pytest tests -q` → **15 passed, 1 skipped**, with the Mongo test skipped locally. Fresh dependency reinstall succeeded. Full frontend build, Docker image build, browser E2E, large-report completeness and live external integrations remain unverified. PR remains a draft; no merge or release.

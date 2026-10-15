@@ -141,3 +141,33 @@ class CapabilityTests(unittest.IsolatedAsyncioTestCase):
         for key, sdk, expected in [('', None, False), ('test-only-key', None, False), ('test-only-key', object(), True)]:
             with patch.dict(os.environ, {'ANTHROPIC_API_KEY': key}), patch.object(workflow, 'find_spec', return_value=sdk):
                 self.assertEqual((await workflow.capabilities(ctx))['ai'], expected)
+
+
+class ReportIntegrityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_download_integrity_and_missing_files(self):
+        import base64
+        import reporting
+        from core import Ctx, sha256_hex
+        from fastapi import HTTPException
+        ctx = Ctx({'id': 'alice'}, 'org-a', 'viewer')
+        raw = b'%PDF-1.4 synthetic test fixture'
+        good = {'data': base64.b64encode(raw).decode()}
+        cases = [([], 404), ([{'data': '!invalid!'}], 409),
+                 ([{'data': base64.b64encode(b'tampered').decode()}], 409),
+                 ([good, good], 409), ([{}], 409), ([good], 200)]
+        for files, expected in cases:
+            with self.subTest(expected=expected, files=files), patch.object(reporting, 'Repository') as repo_cls, patch.object(reporting, 'audit', AsyncMock()) as audit:
+                repo = repo_cls.return_value
+                repo.get = AsyncMock(return_value={'sha256': sha256_hex(raw)})
+                repo.list = AsyncMock(return_value=files)
+                if expected == 200:
+                    response = await reporting.download_report('report-a', ctx)
+                    self.assertEqual(response.body, raw)
+                    audit.assert_awaited_once()
+                else:
+                    with self.assertRaises(HTTPException) as error:
+                        await reporting.download_report('report-a', ctx)
+                    self.assertEqual(error.exception.status_code, expected)
+                    audit.assert_not_awaited()
+                repo.get.assert_awaited_once_with('reports', 'report-a')
+                repo_cls.assert_called_once_with(ctx)
