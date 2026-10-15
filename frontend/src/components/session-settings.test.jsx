@@ -39,6 +39,17 @@ test('shows a load failure with a working retry', async () => {
   api.get.mockRejectedValueOnce(new Error('Temporary failure'));
   await act(async () => root.render(<SessionSettings/>));
   expect(container.querySelector('[role="alert"]').textContent).toContain('Temporary failure');
-  await act(async () => container.querySelector('button').click());
+  await act(async () => container.querySelector('[role="alert"] button').click());
   expect(container.textContent).toContain('Current');
+});
+
+
+test('password change submits only credentials and clears the form', async () => {
+  await act(async () => root.render(<SessionSettings/>));
+  for (const [name, value] of Object.entries({current_password:'old-password',new_password:'new-password',confirm_password:'new-password'})) {
+    container.querySelector(`[name="${name}"]`).value = value;
+  }
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', {bubbles:true,cancelable:true})));
+  expect(api.post).toHaveBeenCalledWith('/auth/password', {current_password:'old-password',new_password:'new-password'});
+  expect(container.querySelector('[name="new_password"]').value).toBe('');
 });

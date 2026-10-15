@@ -4,6 +4,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from pymongo.errors import DuplicateKeyError
+from pymongo import ReturnDocument
 from core import (db, BaseDocument, clean, iso, now, new_id, hash_password, verify_password,
                   create_access_token, create_refresh_token, decode_token, get_current_user, get_ctx, Ctx, audit, ROLES)
 
@@ -21,6 +22,16 @@ class Credentials(BaseModel):
         if len(value.encode("utf-8")) > 72:
             raise ValueError("Password must not exceed 72 UTF-8 bytes")
         return value
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=10, max_length=72)
+    new_password: str = Field(min_length=10, max_length=72)
+
+    @field_validator("current_password", "new_password")
+    @classmethod
+    def byte_limit(cls, value):
+        return Credentials.bcrypt_byte_limit(value)
 
 
 class OrgInput(BaseModel):
@@ -53,7 +64,7 @@ async def seed_admin():
 
 async def establish_session(user, response):
     sid = new_id()
-    await insert_identity("sessions", {"id": sid, "user_id": user["id"], "revoked": False, "created_at": iso(), "expires_at": iso(now() + timedelta(days=7))})
+    await insert_identity("sessions", {"id": sid, "user_id": user["id"], "credential_version": user.get("credential_version", 0), "revoked": False, "created_at": iso(), "expires_at": iso(now() + timedelta(days=7))})
     set_cookies(response, user["id"], sid)
     return public_user(user)
 
@@ -126,8 +137,8 @@ async def refresh(request: Request, response: Response):
     except Exception:
         raise HTTPException(401, "Session expired. Sign in again.")
     doc = await db.users.find_one({"_id": payload["sub"]})
-    if not doc:
-        raise HTTPException(401, "Account not found")
+    if not doc or doc.get("credential_version", 0) != session.get("credential_version", 0):
+        raise HTTPException(401, "Session expired. Sign in again.")
     return await establish_session(clean(doc), response)
 
 
@@ -137,6 +148,36 @@ async def logout(response: Response, user=Depends(get_current_user)):
     for key in ("access_token", "refresh_token", "csrf"):
         response.delete_cookie(key, path="/", secure=not local_cookie_mode(), samesite="lax")
     return {"ok": True}
+
+
+@router.post("/auth/password")
+async def change_password(body: PasswordChange, response: Response, user=Depends(get_current_user)):
+    if user.get("_token_scopes") is not None:
+        raise HTTPException(403, "Use a browser session to change your password")
+    # Independent throttle: a stolen session must not allow unlimited password guesses.
+    key = "password-change:" + user["id"]
+    if await db.auth_attempts.count_documents({"email": key, "expires_at": {"$gt": now()}}) >= 10:
+        raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
+    await insert_identity("auth_attempts", {"email": key, "expires_at": now() + timedelta(minutes=15)})
+    if not verify_password(body.current_password, user["password_hash"]):
+        raise HTTPException(403, "Current password is incorrect")
+    if verify_password(body.new_password, user["password_hash"]):
+        raise HTTPException(422, "Choose a different password")
+    # Compare-and-swap prevents concurrent changes from overwriting one another.
+    # Credential versions also invalidate sessions/tokens minted by in-flight old requests.
+    changed = await db.users.find_one_and_update(
+        {"_id": user["id"], "password_hash": user["password_hash"]},
+        {"$set": {"password_hash": hash_password(body.new_password), "password_changed_at": iso()},
+         "$inc": {"credential_version": 1}}, return_document=ReturnDocument.AFTER)
+    if not changed:
+        raise HTTPException(409, "Credentials changed. Sign in again.")
+    version = changed["credential_version"]
+    old_versions = {"$or": [{"credential_version": {"$exists": False}}, {"credential_version": {"$lt": version}}]}
+    await db.sessions.update_many({"user_id": user["id"], "revoked": False, **old_versions}, {"$set": {"revoked": True}})
+    await db.api_tokens.update_many({"created_by": user["id"], "revoked": False, **old_versions}, {"$set": {"revoked": True, "revoked_at": iso()}})
+    await db.auth_attempts.delete_many({"email": key})
+    await establish_session(clean(changed), response)
+    return {"ok": True, "notice": "Password changed. Previous sessions and API tokens are invalidated."}
 
 
 @router.get("/auth/sessions")

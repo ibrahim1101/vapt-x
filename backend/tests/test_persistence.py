@@ -360,6 +360,18 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/sla-policy').json()['days']['high'] == 7
                     assert client.get('/api/reports/' + report['id'] + '/snapshot').status_code == 404
                     assert client.get('/api/webhooks/'+hook['id']+'/deliveries').status_code == 404
+                    bob_token = post('api-tokens', {'name':'Password rotation fixture','scopes':['read']})['token']
+                    old_access = client.cookies.get('access_token')
+                    old_refresh = client.cookies.get('refresh_token')
+                    wrong = client.post('/api/auth/password', headers=headers(), json={'current_password':'incorrect-password','new_password':'changed-password'})
+                    assert wrong.status_code == 403
+                    assert post('auth/password', {'current_password':'integration-password','new_password':'changed-password'})['ok']
+                    assert client.get('/api/auth/me').status_code == 200
+                    assert client.get('/api/projects',headers={'authorization':'Bearer '+bob_token}).status_code == 401
+                    assert client.get('/api/auth/me',headers={'cookie':'access_token='+old_access}).status_code == 401
+                    assert client.post('/api/auth/refresh', headers={**origin,'cookie':'refresh_token='+old_refresh+'; csrf=synthetic','x-csrf-token':'synthetic'}).status_code == 401
+                    assert client.post('/api/auth/login',headers=origin,json={'email':'bob@example.com','password':'integration-password'}).status_code == 401
+                    assert client.post('/api/auth/login',headers=origin,json={'email':'bob@example.com','password':'changed-password'}).status_code == 200
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])
                     assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True

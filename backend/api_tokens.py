@@ -37,7 +37,7 @@ async def create_token(body:TokenInput,ctx=Depends(get_ctx)):
         count=await db.api_tokens.count_documents({'org_id':ctx.org_id,'created_by':ctx.uid,'revoked':False,'expires_at':{'$gt':iso()}})
         if count>=100:raise HTTPException(409,'Revoke an existing token before creating another (maximum 100 active)')
         token='vaptx_'+secrets.token_urlsafe(32)
-        row=await Repository(ctx).add('api_tokens',{'name':body.name,'scopes':scopes,'token_hash':sha256_hex(token.encode()),
+        row=await Repository(ctx).add('api_tokens',{'name':body.name,'scopes':scopes,'credential_version':ctx.user.get('credential_version',0),'token_hash':sha256_hex(token.encode()),
             'token_prefix':token[:12],'expires_at':(datetime.now(timezone.utc)+timedelta(days=body.expires_days)).isoformat(),'revoked':False})
     return {**metadata(row),'token':token,'notice':'Shown once. Store securely; only its hash is retained. Scope is fixed to this organization and current owner permissions.'}
 

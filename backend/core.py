@@ -119,7 +119,7 @@ async def get_current_user(request: Request) -> dict:
         token=await db.api_tokens.find_one({"token_hash":sha256_hex(raw.encode()),"revoked":False,"expires_at":{"$gt":iso()}})
         if not token:raise HTTPException(401,"Invalid or expired API token")
         user=await db.users.find_one({"_id":token["created_by"]})
-        if not user:raise HTTPException(401,"Token owner is unavailable")
+        if not user or user.get("credential_version",0)!=token.get("credential_version",0):raise HTTPException(401,"Token owner credentials changed")
         user=clean(user)
         user.update(_token_scopes=token["scopes"],_token_org=token["org_id"],_api_token_id=str(token["_id"]))
         request.state.api_user=user
@@ -139,8 +139,8 @@ async def get_current_user(request: Request) -> dict:
     if not sess:
         raise HTTPException(401, "Session revoked")
     user = await db.users.find_one({"_id": payload["sub"]})
-    if not user:
-        raise HTTPException(401, "User not found")
+    if not user or user.get("credential_version", 0) != sess.get("credential_version", 0):
+        raise HTTPException(401, "Session credentials changed")
     user["_sid"] = payload.get("sid")
     return clean(user)
 
