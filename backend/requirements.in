@@ -10,3 +10,6 @@ pymongo==4.13.0
 python-dotenv==1.1.0
 reportlab==4.4.1
 uvicorn==0.34.2
+
+# Authenticated encryption for optional integration secrets.
+cryptography==50.0.2

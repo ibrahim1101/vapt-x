@@ -96,6 +96,39 @@ async def update_hook(hook_id:str,body:HookUpdate,ctx=Depends(get_ctx)):
         await db.webhook_deliveries.update_many(repo.query({'webhook_id':hook_id,'status':'queued'}),{'$set':{'status':'cancelled','finished_at':iso()}})
     return public(row)
 
+@router.post('/webhooks/{hook_id}/rotate-secret')
+async def rotate_secret(hook_id:str,ctx=Depends(get_ctx)):
+    ctx.require('integrations');repo=Repository(ctx)
+    hook=await repo.get('webhooks',hook_id)
+    if hook.get('deleted'):raise HTTPException(404,'Webhook not found')
+    if not configured():raise HTTPException(503,'Webhook encryption key is unavailable')
+    try:
+        configuration=json.loads(cipher().decrypt(hook['encrypted_configuration'].encode()))
+    except Exception:
+        raise HTTPException(409,'Configuration cannot be decrypted; restore the encryption key before rotating')
+    secret=secrets.token_urlsafe(32)
+    configuration['secret']=secret
+    encrypted=cipher().encrypt(json.dumps(configuration).encode()).decode()
+    changed=await db.webhooks.find_one_and_update(repo.query({'_id':hook_id,
+        'encrypted_configuration':hook['encrypted_configuration'],'deleted':False}),
+        {'$set':{'encrypted_configuration':encrypted,'enabled':False,'updated_at':iso()}},return_document=ReturnDocument.AFTER)
+    if not changed:raise HTTPException(409,'Configuration changed; reload before rotating')
+    await db.webhook_deliveries.update_many(repo.query({'webhook_id':hook_id,'status':'queued'}),
+        {'$set':{'status':'cancelled','finished_at':iso()}})
+    await audit(ctx,'webhook.secret_rotated','webhooks',hook_id)
+    return {**public(DomainDocument.from_mongo(changed).model_dump()),'signing_secret':secret,
+        'notice':'Signing secret shown once. Delivery is paused and queued events cancelled. Update your consumer before enabling. An in-flight request may still use the previous secret.'}
+
+@router.delete('/webhooks/{hook_id}')
+async def remove_hook(hook_id:str,ctx=Depends(get_ctx)):
+    ctx.require('integrations');repo=Repository(ctx)
+    await repo.get('webhooks',hook_id)
+    await repo.update('webhooks',hook_id,{'deleted':True,'enabled':False})
+    await db.webhook_deliveries.update_many(repo.query({'webhook_id':hook_id,'status':'queued'}),
+        {'$set':{'status':'cancelled','finished_at':iso()}})
+    return {'ok':True,'notice':'Removed from subscriptions. Historical delivery records are retained. An in-flight request may finish.'}
+
+
 async def enqueue(hook,event,event_id,metadata):
     async with OUTBOX_LOCK:
         pending=await db.webhook_deliveries.count_documents({'org_id':hook['org_id'],'status':{'$in':['queued','running']}})

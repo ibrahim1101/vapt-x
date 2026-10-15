@@ -305,6 +305,19 @@ class PersistenceTests(unittest.TestCase):
                         listed=client.get('/api/webhooks').json()
                         assert hook['signing_secret'] not in json.dumps(listed)
                         assert 'encrypted_configuration' not in json.dumps(listed)
+                        mongo[database].webhook_deliveries.update_one({'_id':receipt['id']},{'$set':{'status':'failed'}})
+                        retried=post('webhooks/'+hook['id']+'/deliveries/'+receipt['id']+'/retry',{})
+                        assert retried['status'] == 'queued' and retried['attempts'] == 1 and retried['cycle_attempts'] == 0
+                        rotated=post('webhooks/'+hook['id']+'/rotate-secret',{})
+                        assert rotated['signing_secret'] != hook['signing_secret'] and rotated['enabled'] is False
+                        configuration=json.loads(webhooks.cipher().decrypt(mongo[database].webhooks.find_one({'_id':hook['id']})['encrypted_configuration'].encode()))
+                        assert configuration['secret'] == rotated['signing_secret']
+                        assert configuration['url'] == 'https://example.com/synthetic-hook'
+                        assert mongo[database].webhook_deliveries.find_one({'_id':receipt['id']})['status'] == 'cancelled'
+                        assert client.delete('/api/webhooks/'+hook['id'],headers=headers()).status_code == 200
+                        assert client.get('/api/webhooks').json()['hooks'] == []
+                        assert client.post('/api/webhooks/'+hook['id']+'/rotate-secret',headers=headers()).status_code == 404
+
                     # Navigation must reach findings beyond the workspace's 1,000-row limit.
                     mongo[database].findings.insert_many([{
                         '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],

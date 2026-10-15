@@ -54,3 +54,17 @@ class WebhookTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ,{'WEBHOOK_ENCRYPTION_KEYS':''}),patch.object(webhooks,'db') as database:
             await webhooks.dispatch_event('org','finding.triaged',{'id':'event'})
             database.webhooks.find.assert_not_called()
+
+    async def test_rotation_conflict_does_not_expose_a_new_secret_or_update_queue(self):
+        hook={'id':'hook','encrypted_configuration':webhooks.cipher().encrypt(json.dumps({'url':'https://example.com/path','secret':'old-secret'}).encode()).decode()}
+        with patch.object(webhooks,'Repository') as repository,patch.object(webhooks,'db') as db:
+            repository.return_value.get=AsyncMock(return_value=hook)
+            repository.return_value.query.side_effect=lambda fields:{**fields,'org_id':'org'}
+            db.webhooks.find_one_and_update=AsyncMock(return_value=None)
+            with self.assertRaises(HTTPException) as error:await webhooks.rotate_secret('hook',Ctx({'id':'owner'},'org','org_admin'))
+            self.assertEqual(error.exception.status_code,409)
+            db.webhook_deliveries.update_many.assert_not_called()
+    async def test_viewer_cannot_rotate_or_remove_subscription(self):
+        for action in (webhooks.rotate_secret,webhooks.remove_hook):
+            with self.assertRaises(HTTPException) as error:await action('hook',Ctx({'id':'viewer'},'org','viewer'))
+            self.assertEqual(error.exception.status_code,403)
