@@ -63,6 +63,9 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await saveModal(page, `/projects/${project.id}`, 'PATCH');
   await page.getByTestId('field-project-status').selectOption('active');
   await expect(page.getByTestId(`edit-project-${project.id}`)).toBeVisible();
+  await page.getByTestId(`template-project-${project.id}`).click();
+  await page.getByTestId('field-name').fill('Synthetic reusable project template');
+  await saveModal(page, '/project-templates');
   await page.getByTestId('project-filter').selectOption(project.id);
 
   await page.getByTestId('nav-assets-scope').click();
@@ -79,6 +82,12 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await page.getByTestId('field-target').fill('training://local');
   const asset = await saveModal(page, '/assets');
   await expect(page.getByTestId(`assets-row-${asset.id}`)).toBeVisible();
+  await page.getByTestId('bulk-assets').click();
+  await page.getByTestId('field-content').fill(JSON.stringify([{name:'Synthetic duplicate',scope_id:scope.id,target:'training://local'}]));
+  const receipt = await saveModal(page, '/assets/bulk');
+  expect(receipt.duplicate).toBe(1);
+  expect(receipt.created).toBe(0);
+
   await page.getByTestId(`edit-asset-${asset.id}`).click();
   await expect(page.getByTestId('asset-history')).toContainText('assets.created');
   await page.getByTestId('field-owner').fill('Synthetic asset team');

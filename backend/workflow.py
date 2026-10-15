@@ -9,15 +9,23 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, field_validator
 from core import get_ctx, iso, audit, db, DomainDocument
 from pymongo import ReturnDocument
+from pymongo.errors import PyMongoError
 from repository import Repository
 from scanners import target_host, validate_scope, run_job, SCANNERS, store_findings, JOB_LOCK, ACTIVE_CHECKS
 from importers import parse_report
 
 router = APIRouter(prefix="/api")
 SCAN_LOCK = JOB_LOCK
+ASSET_IMPORT_LOCK = asyncio.Lock()
 
 
 class ProjectInput(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    description: str = Field(default="", max_length=3000)
+    template_id: str | None = Field(default=None, max_length=100)
+
+
+class ProjectTemplateInput(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     description: str = Field(default="", max_length=3000)
 
@@ -94,6 +102,10 @@ class AssetUpdate(BaseModel):
             if value not in result:
                 result.append(value)
         return result
+
+
+class BulkAssetInput(BaseModel):
+    assets: list[AssetInput] = Field(min_length=1, max_length=100)
 
 
 class AssessmentInput(BaseModel):
@@ -218,13 +230,31 @@ async def list_findings(
 @router.post("/projects")
 async def create_project(body: ProjectInput, ctx=Depends(get_ctx)):
     ctx.require("write")
-    return await Repository(ctx).add("projects", {**body.model_dump(), "status": "active"})
+    repo = Repository(ctx)
+    fields = body.model_dump()
+    if body.template_id:
+        template = await repo.get("project_templates", body.template_id)
+        if not fields["description"]:
+            fields["description"] = template["description"]
+    return await repo.add("projects", {**fields, "status": "active"})
+
+
+@router.get("/project-templates")
+async def list_project_templates(ctx=Depends(get_ctx)):
+    ctx.require("read")
+    return await Repository(ctx).complete_list("project_templates", max_rows=500)
+
+
+@router.post("/project-templates")
+async def create_project_template(body: ProjectTemplateInput, ctx=Depends(get_ctx)):
+    ctx.require("write")
+    return await Repository(ctx).add("project_templates", body.model_dump())
 
 
 @router.patch("/projects/{project_id}")
 async def update_project(project_id: str, body: ProjectUpdate, ctx=Depends(get_ctx)):
     ctx.require("write")
-    return await Repository(ctx).update("projects", project_id, body.model_dump())
+    return await Repository(ctx).update("projects", project_id, body.model_dump(exclude={"template_id"}))
 
 
 @router.post("/scopes")
@@ -269,6 +299,38 @@ async def create_asset(body: AssetInput, ctx=Depends(get_ctx)):
     if scope["project_id"] != body.project_id or host != scope["host"]:
         raise HTTPException(403, "Asset is outside the project's exact authorized host scope")
     return await repo.add("assets", body.model_dump())
+
+
+@router.post("/assets/bulk")
+async def bulk_assets(body: BulkAssetInput, ctx=Depends(get_ctx)):
+    ctx.require("write")
+    repo = Repository(ctx)
+    # Preflight every relationship before writing any row. Registration never
+    # grants scan permission, extends scope windows or changes existing assets.
+    for row in body.assets:
+        await repo.get("projects", row.project_id)
+        scope = await repo.get("scopes", row.scope_id)
+        try:
+            host = target_host(row.target)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        if scope["project_id"] != row.project_id or host != scope["host"]:
+            raise HTTPException(403, "Batch contains an asset outside its project's exact host scope")
+    results = []
+    async with ASSET_IMPORT_LOCK:
+        for index, row in enumerate(body.assets):
+            try:
+                existing = await repo.list("assets", {"project_id": row.project_id,
+                    "scope_id": row.scope_id, "target": row.target}, limit=1)
+                if existing:
+                    results.append({"index": index, "status": "duplicate", "id": existing[0]["id"]})
+                else:
+                    asset = await repo.add("assets", row.model_dump())
+                    results.append({"index": index, "status": "created", "id": asset["id"]})
+            except PyMongoError:
+                results.append({"index": index, "status": "failed", "error": "Storage unavailable; retry this row"})
+    return {"results": results, **{status: sum(row["status"] == status for row in results)
+            for status in ("created", "duplicate", "failed")}}
 
 
 @router.get("/assets")

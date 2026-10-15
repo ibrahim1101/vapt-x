@@ -53,6 +53,10 @@ class PersistenceTests(unittest.TestCase):
                         return response.json()
                     project = post('projects', {'name': 'Controlled integration'})
                     now = datetime.now(timezone.utc)
+                    template = post('project-templates', {'name':'Synthetic template', 'description':'Reusable synthetic context'})
+                    from_template = post('projects', {'name':'Template derived project','template_id':template['id']})
+                    assert from_template['description'] == 'Reusable synthetic context'
+                    assert any(row['id'] == template['id'] for row in client.get('/api/project-templates').json())
                     scope = post('scopes', {'project_id': project['id'], 'target': 'training://local',
                         'authorization_reference': 'Synthetic integration fixture', 'authorized': True,
                         'starts_at': (now-timedelta(hours=1)).isoformat(), 'ends_at': (now+timedelta(hours=1)).isoformat(),
@@ -67,6 +71,9 @@ class PersistenceTests(unittest.TestCase):
                     assert response.status_code == 200, response.text
                     asset = post('assets', {'project_id': project['id'], 'scope_id': scope['id'],
                         'name': 'Owned fixture', 'target': 'training://local'})
+                    receipt = post('assets/bulk', {'assets':[{'project_id':project['id'], 'scope_id':scope['id'],
+                        'name':'Duplicate fixture', 'target':'training://local'}]})
+                    assert receipt['duplicate'] == 1 and receipt['created'] == 0
                     response = client.patch('/api/assets/' + asset['id'], headers=headers(), json={
                         'name': 'Updated asset', 'owner': 'Fixture team', 'criticality': 'high',
                         'tags': [' production ', 'api', 'api'], 'target': 'https://different.example'})
@@ -240,6 +247,8 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/assessments/' + retest['id'] + '/history').status_code == 404
                     assert client.post('/api/assessments/' + retest['id'] + '/cancel', headers=headers(), json={'reason':'Foreign tenant attempt'}).status_code == 404
                     assert client.get('/api/assessments').json()['total'] == 0
+                    assert client.get('/api/project-templates').json() == []
+                    assert client.post('/api/projects', headers=headers(), json={'name':'Foreign template attempt','template_id':template['id']}).status_code == 404
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])
                     assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True
