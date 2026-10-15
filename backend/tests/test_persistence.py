@@ -176,6 +176,16 @@ class PersistenceTests(unittest.TestCase):
                         mongo[database].sessions.insert_one({'_id': uuid.uuid4().hex, 'user_id': user['id'], 'revoked': False, 'created_at': now.isoformat(), 'expires_at': (now+timedelta(days=1)).isoformat()})
                     assert post('auth/sessions/revoke-others', {})['revoked_count'] == 2
                     assert client.get('/api/auth/me').status_code == 200
+                    cancelled = post('assessments/' + retest['id'] + '/cancel', {'reason':'Synthetic lifecycle validation'})
+                    assert cancelled['status'] == 'cancelled'
+                    response = client.post('/api/imports', headers=headers(), json={
+                        'assessment_id':retest['id'], 'asset_id':asset['id'], 'scanner':'semgrep', 'content':fixture})
+                    assert response.status_code == 409, response.text
+                    retried = post('assessments/' + retest['id'] + '/retry', {})
+                    assert retried['status'] == 'draft' and retried['retry_of'] == retest['id']
+                    history = client.get('/api/assessments/' + retest['id'] + '/history').json()
+                    assert any(event['action'] == 'assessment.cancelled' for event in history['events'])
+                    assert client.get('/api/assessments', params={'project_id':project['id'], 'status':'cancelled'}).json()['total'] == 1
                     # Navigation must reach findings beyond the workspace's 1,000-row limit.
                     mongo[database].findings.insert_many([{
                         '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],
@@ -220,6 +230,9 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/assets/' + asset['id'] + '/history').status_code == 404
                     assert client.get('/api/assets', params={'project_id': project['id']}).status_code == 404
                     assert client.get('/api/assets').json()['total'] == 0
+                    assert client.get('/api/assessments/' + retest['id'] + '/history').status_code == 404
+                    assert client.post('/api/assessments/' + retest['id'] + '/cancel', headers=headers(), json={'reason':'Foreign tenant attempt'}).status_code == 404
+                    assert client.get('/api/assessments').json()['total'] == 0
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])
                     assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True

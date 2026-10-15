@@ -10,11 +10,11 @@ from pydantic import BaseModel, Field, field_validator
 from core import get_ctx, iso, audit, db, DomainDocument
 from pymongo import ReturnDocument
 from repository import Repository
-from scanners import target_host, validate_scope, run_job, SCANNERS, store_findings
+from scanners import target_host, validate_scope, run_job, SCANNERS, store_findings, JOB_LOCK, ACTIVE_CHECKS
 from importers import parse_report
 
 router = APIRouter(prefix="/api")
-SCAN_LOCK = asyncio.Lock()
+SCAN_LOCK = JOB_LOCK
 
 
 class ProjectInput(BaseModel):
@@ -309,9 +309,10 @@ async def create_scan(body: ScanInput, background: BackgroundTasks, ctx=Depends(
     repo = Repository(ctx)
     assessment = await repo.get("assessments", body.assessment_id)
     asset = await repo.get("assets", body.asset_id)
-    await validate_scope(repo, assessment, asset, body.scanner)
     async with SCAN_LOCK:
-        active = await repo.list("jobs", {"status": {"$in": ["queued", "running"]}})
+        assessment = await repo.get("assessments", body.assessment_id)
+        await validate_scope(repo, assessment, asset, body.scanner)
+        active = await repo.list("jobs", {"status": {"$in": ["queued", "running", "cancelling"]}})
         if len(active) >= 2:
             raise HTTPException(429, "Two scans are already active in this organization")
         job = await repo.add("jobs", {**body.model_dump(), "project_id": assessment["project_id"], "status": "queued", "source": "execution", "logs": ["Queued for authorization verification"], "checks": [], "finding_count": 0})
@@ -332,10 +333,13 @@ async def import_scan(body: ImportInput, ctx=Depends(get_ctx)):
             raise ValueError("Maximum 2,000 findings per import")
     except Exception as exc:
         raise HTTPException(422, f"Cannot parse this {body.scanner} report: {str(exc)[:180]}")
-    job = await repo.add("jobs", {"assessment_id": assessment["id"], "asset_id": asset["id"], "project_id": assessment["project_id"], "scanner": body.scanner, "source": "import", "status": "completed", "raw_output": body.content, "checks": [], "logs": ["Imported scanner-authored output. Not independently verified; asset association declared by uploader."], "finished_at": iso()})
-    count = await store_findings(repo, assessment, asset, job, rows)
-    await repo.update("assessments", assessment["id"], {"status": "review"}, log=False)
-    return await repo.update("jobs", job["id"], {"finding_count": count}, log=False)
+    async with JOB_LOCK:
+        assessment = await repo.get("assessments", body.assessment_id)
+        await validate_scope(repo, assessment, asset, body.scanner)
+        job = await repo.add("jobs", {"assessment_id": assessment["id"], "asset_id": asset["id"], "project_id": assessment["project_id"], "scanner": body.scanner, "source": "import", "status": "completed", "raw_output": body.content, "checks": [], "logs": ["Imported scanner-authored output. Not independently verified; asset association declared by uploader."], "finished_at": iso()})
+        count = await store_findings(repo, assessment, asset, job, rows)
+        await repo.update("assessments", assessment["id"], {"status": "review"}, log=False)
+        return await repo.update("jobs", job["id"], {"finding_count": count}, log=False)
 
 
 @router.get("/jobs/{job_id}")
@@ -397,6 +401,67 @@ async def create_task(body: TaskInput, ctx=Depends(get_ctx)):
 async def update_task(task_id: str, body: TaskUpdate, ctx=Depends(get_ctx)):
     ctx.require("remediate")
     return await Repository(ctx).update("tasks", task_id, body.model_dump())
+
+
+@router.get("/assessments")
+async def list_assessments(project_id: str | None = None,
+    search: str = Query(default="", max_length=120),
+    status: Literal["draft", "review", "cancelled"] | None = None,
+    offset: int = Query(default=0, ge=0, le=1_000_000),
+    limit: int = Query(default=25, ge=1, le=100), ctx=Depends(get_ctx)):
+    ctx.require("read")
+    repo = Repository(ctx)
+    filters = {}
+    if project_id:
+        await repo.get("projects", project_id)
+        filters["project_id"] = project_id
+    if search.strip():
+        filters["name"] = {"$regex": re.escape(search.strip()), "$options": "i"}
+    if status:
+        filters["status"] = status
+    return await repo.page("assessments", filters, offset=offset, limit=limit)
+
+
+@router.post("/assessments/{assessment_id}/cancel")
+async def cancel_assessment(assessment_id: str, body: ScopeRevocationInput, ctx=Depends(get_ctx)):
+    ctx.require("scan")
+    repo = Repository(ctx)
+    async with JOB_LOCK:
+        assessment = await repo.get("assessments", assessment_id)
+        if assessment.get("status") == "cancelled":
+            return assessment
+        jobs = await repo.complete_list("jobs", {"assessment_id": assessment_id, "status": {"$in": ["queued", "running", "cancelling"]}})
+        result = await repo.update("assessments", assessment_id, {"status": "cancelled",
+            "cancelled_at": iso(), "cancelled_by": ctx.uid, "cancellation_reason": body.reason})
+        for job in jobs:
+            task = ACTIVE_CHECKS.get((ctx.org_id, job["id"]))
+            await repo.update("jobs", job["id"], {"status": "cancelling" if task else "cancelled",
+                "cancellation_reason": body.reason, **({"cancellation_requested_at": iso()} if task else {"finished_at": iso()})}, log=False)
+            if task:
+                task.cancel()
+        await audit(ctx, "assessment.cancelled", "assessments", assessment_id, {"reason": body.reason})
+    return result
+
+
+@router.post("/assessments/{assessment_id}/retry")
+async def retry_assessment(assessment_id: str, ctx=Depends(get_ctx)):
+    ctx.require("scan")
+    repo = Repository(ctx)
+    previous = await repo.get("assessments", assessment_id)
+    if previous.get("status") != "cancelled":
+        raise HTTPException(409, "Only cancelled assessments can be retried; use retest for reviewed assessments")
+    return await repo.add("assessments", {"project_id": previous["project_id"],
+        "name": previous["name"][:100] + " · Retry", "asset_ids": previous["asset_ids"],
+        "status": "draft", "baseline_id": previous.get("baseline_id"), "retry_of": assessment_id})
+
+
+@router.get("/assessments/{assessment_id}/history")
+async def assessment_history(assessment_id: str, ctx=Depends(get_ctx)):
+    ctx.require("read")
+    repo = Repository(ctx)
+    await repo.get("assessments", assessment_id)
+    events = await repo.list("audit_events", {"resource_type": "assessments", "resource_id": assessment_id}, limit=101)
+    return {"events": events[:100], "has_more": len(events) > 100}
 
 
 @router.post("/assessments/{assessment_id}/retest")

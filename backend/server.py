@@ -24,7 +24,7 @@ async def lifespan(app):
             await db[collection].create_index([('org_id', 1), ('created_at', -1)])
         await db.findings.create_index([('org_id', 1), ('project_id', 1), ('created_at', -1), ('_id', -1)])
         await db.evidence_chunks.create_index([('org_id', 1), ('evidence_id', 1), ('index', 1)], unique=True)
-        await db.jobs.update_many({'status': {'$in': ['queued', 'running']}}, {'$set': {'status': 'interrupted', 'error': 'Worker restarted before completion; run again.', 'finished_at': iso()}})
+        await db.jobs.update_many({'status': {'$in': ['queued', 'running', 'cancelling']}}, {'$set': {'status': 'interrupted', 'error': 'Worker restarted before completion; run again.', 'finished_at': iso()}})
         logging.getLogger(__name__).info('VAPT-X database initialization completed')
         yield
     finally:

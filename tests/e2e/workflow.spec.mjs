@@ -196,6 +196,22 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await expect(page.getByTestId('comparison-not_retested')).toContainText(fixtureTitle);
   await expect(page.getByTestId('comparison-not_observed').locator('strong')).toHaveText('0');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByTestId(`cancel-assessment-${retest.id}`).click();
+  await page.getByTestId('field-cancellation-reason').fill('Synthetic cancellation lifecycle validation');
+  await saveModal(page, `/assessments/${retest.id}/cancel`);
+  await expect(page.getByTestId(`assessment-card-${retest.id}`)).toContainText('cancelled');
+  await expect(page.getByTestId(`import-${retest.id}`)).toHaveCount(0);
+  const retryResult = page.waitForResponse(r => r.url().endsWith(`/api/assessments/${retest.id}/retry`) && r.request().method() === 'POST');
+  await page.getByTestId(`retry-assessment-${retest.id}`).click();
+  const retryResponse = await retryResult;
+  expect(retryResponse.ok()).toBeTruthy();
+  const retried = await retryResponse.json();
+  expect(retried.retry_of).toBe(retest.id);
+  await expect(page.getByTestId(`assessment-card-${retried.id}`)).toContainText('draft');
+  await page.getByTestId(`assessment-history-${retest.id}`).click();
+  await expect(page.getByTestId('workspace-modal')).toContainText('assessment.cancelled');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
 
   // A separate organization must not see or mutate the first tenant's resources.
   await page.getByTestId('nav-organization').click();
