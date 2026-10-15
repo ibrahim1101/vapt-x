@@ -10,6 +10,7 @@ from pymongo.errors import PyMongoError
 from request_limits import RequestBodyLimitMiddleware
 from auth import router as auth_router, seed_admin
 from workflow import router as workflow_router
+from analytics import router as analytics_router
 from evidence import router as evidence_router
 from reporting import router as reporting_router
 from analyst import router as analyst_router
@@ -65,7 +66,7 @@ async def request_security(request: Request, call_next):
         # API tokens never enter account/session/organization administration or
         # mint credentials. New domain families must be explicitly enabled here.
         family=request.url.path.removeprefix('/api/').split('/')[0]
-        if not request.url.path.startswith('/api/') or family not in {'workspace','capabilities','projects','project-templates','assets','assessments','scopes','scans','imports','inventory-imports','jobs','findings','tasks','evidence','reports','sla-policy','ai'}:
+        if not request.url.path.startswith('/api/') or family not in {'workspace','capabilities','projects','project-templates','assets','assessments','scopes','scans','imports','inventory-imports','jobs','findings','tasks','evidence','reports','sla-policy','ai','analytics'}:
             return JSONResponse({'detail':'API token is not permitted on this endpoint'},status_code=403)
     if not bearer and request.method in {'POST', 'PATCH', 'PUT', 'DELETE'}:
 
@@ -123,3 +124,5 @@ app.include_router(governance_router)
 app.include_router(tokens_router)
 
 app.include_router(webhooks_router)
+
+app.include_router(analytics_router)

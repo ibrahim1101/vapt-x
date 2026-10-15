@@ -359,5 +359,17 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   expect((await deniedImport).status()).toBe(403);
   await expect(page.getByTestId('workspace-modal')).toBeVisible();
   await page.getByTestId('cancel-form').click();
+  await page.getByTestId('nav-organization').click();
+  await page.getByTestId('field-current_password').fill(password);
+  const changedPassword='synthetic-browser-changed-password-456';
+  await page.getByTestId('field-new_password').fill(changedPassword);
+  await page.getByTestId('field-confirm_password').fill(changedPassword);
+  const changed=page.waitForResponse(r=>r.url().endsWith('/api/auth/password')&&r.request().method()==='POST');
+  await page.getByTestId('change-password').click();
+  expect((await changed).ok()).toBeTruthy();
+  await expect(page.getByTestId('field-new_password')).toHaveValue('');
+  await page.getByTestId('logout').click();
+  await login(page,email,changedPassword);
+  await expect(page.getByTestId('analytics-coverage')).toContainText('all stored records');
   expect(pageErrors).toEqual([]);
 });

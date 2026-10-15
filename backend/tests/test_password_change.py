@@ -8,8 +8,9 @@ from starlette.requests import Request
 
 class PasswordTests(unittest.IsolatedAsyncioTestCase):
     async def test_change_uses_cas_and_rotates_session_without_returning_hash(self):
-        user={'id':'alice','password_hash':'old-hash','credential_version':2}
+        user={'id':'alice','credential_version':2}
         with patch.object(auth,'db') as db, patch.object(auth,'verify_password',side_effect=[True,False]), patch.object(auth,'hash_password',return_value='new-hash'), patch.object(auth,'insert_identity',AsyncMock()), patch.object(auth,'establish_session',AsyncMock()) as establish:
+            db.users.find_one=AsyncMock(return_value={'_id':'alice','password_hash':'old-hash','credential_version':2})
             db.auth_attempts.count_documents=AsyncMock(return_value=0)
             db.auth_attempts.delete_many=AsyncMock()
             db.users.find_one_and_update=AsyncMock(return_value={'_id':'alice','password_hash':'new-hash','credential_version':3})
@@ -24,6 +25,7 @@ class PasswordTests(unittest.IsolatedAsyncioTestCase):
     async def test_wrong_password_and_throttle_do_not_change_credentials(self):
         for count,status in [(0,403),(10,429)]:
             with patch.object(auth,'db') as db,patch.object(auth,'verify_password',return_value=False),patch.object(auth,'insert_identity',AsyncMock()):
+                db.users.find_one=AsyncMock(return_value={'_id':'alice','password_hash':'old'})
                 db.auth_attempts.count_documents=AsyncMock(return_value=count)
                 with self.assertRaises(HTTPException) as error:
                     await auth.change_password(auth.PasswordChange(current_password='wrong-password',new_password='new-password'),Response(),{'id':'alice','password_hash':'old'})

@@ -319,6 +319,11 @@ class PersistenceTests(unittest.TestCase):
                     assert response.status_code == 200, response.text
                     page = response.json()
                     assert page['total'] == 1005 and len(page['items']) == 5 and not page['has_more']
+                    summary = client.get('/api/analytics/summary',params={'project_id':project['id']}).json()
+                    assert summary['assets'] == 1006 and summary['complete_collection_counts'] is True, summary
+                    assert summary['open_findings'] == mongo[database].findings.count_documents({'org_id':org['id'],'project_id':project['id'],'status':{'$nin':['resolved','false_positive']}})
+                    assert client.get('/api/analytics/summary',params={'project_id':'foreign'}).status_code == 404
+
                     assert all(row['org_id'] == org['id'] for row in page['items'])
                     assert client.get('/api/findings', params={'limit': 101}).status_code == 422
                     mongo[database].assets.insert_many([{'_id': 'asset-page-' + str(i),
@@ -328,6 +333,11 @@ class PersistenceTests(unittest.TestCase):
                     page = client.get('/api/assets', params={'project_id': project['id'],
                         'search': 'Inventory page fixture', 'criticality': 'medium', 'offset':1000}).json()
                     assert page['total'] == 1005 and len(page['items']) == 5 and not page['has_more']
+                    summary = client.get('/api/analytics/summary',params={'project_id':project['id']}).json()
+                    assert summary['assets'] == 1006 and summary['complete_collection_counts'] is True, summary
+                    assert summary['open_findings'] == mongo[database].findings.count_documents({'org_id':org['id'],'project_id':project['id'],'status':{'$nin':['resolved','false_positive']}})
+                    assert client.get('/api/analytics/summary',params={'project_id':'foreign'}).status_code == 404
+
                     # A second organization cannot retrieve or mutate any first-organization resource.
                     response = client.post('/api/auth/register', headers=origin, json={'email': 'bob@example.com', 'password': 'integration-password'})
                     assert response.status_code == 200, response.text
@@ -346,6 +356,7 @@ class PersistenceTests(unittest.TestCase):
                     assert response.status_code == 404
                     assert client.get('/api/findings', params={'project_id': project['id']}).status_code == 404
                     assert client.get('/api/findings').json()['total'] == 0
+                    assert client.get('/api/analytics/summary').json()['findings'] == 0
                     assert client.get('/api/assets/' + asset['id'] + '/history').status_code == 404
                     assert client.get('/api/assets', params={'project_id': project['id']}).status_code == 404
                     assert client.get('/api/assets').json()['total'] == 0

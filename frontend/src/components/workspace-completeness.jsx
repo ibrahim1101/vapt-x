@@ -16,7 +16,7 @@ export function WorkspaceCompletenessNotice({ collections = [], projectSelected 
       <AlertTriangle size={18} aria-hidden="true" />
       <div>
         <strong>Only part of this workspace is loaded.</strong>
-        <p>Some {labels.join(', ')} are omitted. Counts, charts, search, and project filters reflect only the loaded records and may be incomplete.</p>
+        <p>Some {labels.join(', ')} are omitted. List previews, search, and project filters reflect only the loaded records and may be incomplete. Overview totals and severity charts use complete server counts.</p>
         {!projectSelected && <p>Choose a project above to load a narrower dataset from the server.</p>}
       </div>
     </div>

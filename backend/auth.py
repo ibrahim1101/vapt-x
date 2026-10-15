@@ -154,19 +154,22 @@ async def logout(response: Response, user=Depends(get_current_user)):
 async def change_password(body: PasswordChange, response: Response, user=Depends(get_current_user)):
     if user.get("_token_scopes") is not None:
         raise HTTPException(403, "Use a browser session to change your password")
+    credential = await db.users.find_one({"_id": user["id"]})
+    if not credential or credential.get("credential_version", 0) != user.get("credential_version", 0):
+        raise HTTPException(401, "Credentials changed. Sign in again.")
     # Independent throttle: a stolen session must not allow unlimited password guesses.
     key = "password-change:" + user["id"]
     if await db.auth_attempts.count_documents({"email": key, "expires_at": {"$gt": now()}}) >= 10:
         raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
     await insert_identity("auth_attempts", {"email": key, "expires_at": now() + timedelta(minutes=15)})
-    if not verify_password(body.current_password, user["password_hash"]):
+    if not verify_password(body.current_password, credential["password_hash"]):
         raise HTTPException(403, "Current password is incorrect")
-    if verify_password(body.new_password, user["password_hash"]):
+    if verify_password(body.new_password, credential["password_hash"]):
         raise HTTPException(422, "Choose a different password")
     # Compare-and-swap prevents concurrent changes from overwriting one another.
     # Credential versions also invalidate sessions/tokens minted by in-flight old requests.
     changed = await db.users.find_one_and_update(
-        {"_id": user["id"], "password_hash": user["password_hash"]},
+        {"_id": user["id"], "password_hash": credential["password_hash"]},
         {"$set": {"password_hash": hash_password(body.new_password), "password_changed_at": iso()},
          "$inc": {"credential_version": 1}}, return_document=ReturnDocument.AFTER)
     if not changed:
