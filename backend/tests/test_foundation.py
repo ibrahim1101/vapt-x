@@ -171,3 +171,58 @@ class ReportIntegrityTests(unittest.IsolatedAsyncioTestCase):
                     audit.assert_not_awaited()
                 repo.get.assert_awaited_once_with('reports', 'report-a')
                 repo_cls.assert_called_once_with(ctx)
+
+
+class CompletenessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_complete_list_keeps_more_than_1000_and_rejects_over_cap(self):
+        from repository import Repository
+        from core import Ctx
+        from fastapi import HTTPException
+        repo = Repository(Ctx({'id': 'alice'}, 'org-a', 'viewer'))
+        with patch.object(repo, 'list', AsyncMock(return_value=[{}] * 2000)) as listing:
+            self.assertEqual(len(await repo.complete_list('findings')), 2000)
+            listing.assert_awaited_once_with('findings', None, limit=5001)
+        with patch.object(repo, 'list', AsyncMock(return_value=[{}] * 5001)):
+            with self.assertRaises(HTTPException) as error:
+                await repo.complete_list('findings')
+            self.assertEqual(error.exception.status_code, 413)
+
+    async def test_workspace_discloses_truncation(self):
+        import workflow
+        from core import Ctx
+        async def listing(collection, filters=None, limit=1000):
+            return [{'id': str(i)} for i in range(1001 if collection == 'findings' else 2)]
+        with patch.object(workflow, 'Repository') as repo_cls:
+            repo_cls.return_value.list = AsyncMock(side_effect=listing)
+            data = await workflow.workspace(None, Ctx({'id': 'alice'}, 'org-a', 'viewer'))
+            self.assertEqual(data['truncated_collections'], ['findings'])
+            self.assertEqual(len(data['findings']), 1000)
+            self.assertEqual(len(data['assets']), 2)
+
+
+class EvidenceIntegrityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_bad_sequences_encoding_and_size_are_rejected(self):
+        import evidence
+        from fastapi import HTTPException
+        from unittest.mock import Mock
+        item = {'id': 'e1', 'chunk_count': 2, 'size': 2}
+        for chunks in [[], [{'index': 0, 'data': 'YQ=='}, {'index': 0, 'data': 'Yg=='}],
+                       [{'index': 0, 'data': '!'}, {'index': 1, 'data': 'Yg=='}],
+                       [{'index': 0, 'data': 'YQ=='}, {'index': 1, 'data': ''}]]:
+            repo = Mock(list=AsyncMock(return_value=chunks))
+            with self.assertRaises(HTTPException) as error:
+                await evidence.read_bytes(repo, item)
+            self.assertEqual(error.exception.status_code, 409)
+
+    async def test_ready_evidence_cannot_be_reblessed_after_tampering(self):
+        import evidence
+        from core import Ctx, sha256_hex
+        from fastapi import HTTPException
+        item = {'id': 'e1', 'created_by': 'alice', 'status': 'ready', 'size': 4, 'sha256': sha256_hex(b'good')}
+        with patch.object(evidence, 'Repository') as repo_cls, patch.object(evidence, 'read_bytes', AsyncMock(return_value=b'evil')):
+            repo_cls.return_value.get = AsyncMock(return_value=item)
+            repo_cls.return_value.update = AsyncMock()
+            with self.assertRaises(HTTPException) as error:
+                await evidence.complete('e1', Ctx({'id': 'alice'}, 'org-a', 'analyst'))
+            self.assertEqual(error.exception.status_code, 409)
+            repo_cls.return_value.update.assert_not_awaited()

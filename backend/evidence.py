@@ -60,7 +60,16 @@ async def read_bytes(repo, item):
     chunks = await repo.list("evidence_chunks", {"evidence_id": item["id"]})
     if len(chunks) != item["chunk_count"]:
         raise HTTPException(409, "Upload is incomplete")
-    return b"".join(base64.b64decode(c["data"]) for c in sorted(chunks, key=lambda c: c["index"]))
+    try:
+        ordered = sorted(chunks, key=lambda c: c["index"])
+        if [c["index"] for c in ordered] != list(range(item["chunk_count"])):
+            raise ValueError("Invalid chunk sequence")
+        raw = b"".join(base64.b64decode(c["data"], validate=True) for c in ordered)
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(409, "Evidence integrity verification failed") from None
+    if len(raw) != item["size"]:
+        raise HTTPException(409, "Evidence integrity verification failed")
+    return raw
 
 
 @router.post("/evidence/{evidence_id}/complete")
@@ -73,6 +82,12 @@ async def complete(evidence_id: str, ctx=Depends(get_ctx)):
     raw = await read_bytes(repo, item)
     if len(raw) != item["size"]:
         raise HTTPException(400, "File size mismatch")
+    if item["status"] == "ready":
+        if hashlib.sha256(raw).hexdigest() != item.get("sha256"):
+            raise HTTPException(409, "Evidence integrity verification failed")
+        return item
+    if item["status"] != "uploading":
+        raise HTTPException(409, "Evidence is not accepting completion")
     extension = item["filename"].rsplit(".", 1)[-1].lower()
     signatures = {"pdf": b"%PDF-", "png": b"\x89PNG\r\n\x1a\n", "jpg": b"\xff\xd8\xff", "jpeg": b"\xff\xd8\xff"}
     if extension in signatures and not raw.startswith(signatures[extension]):

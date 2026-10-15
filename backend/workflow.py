@@ -93,9 +93,15 @@ async def workspace(project_id: str | None = None, ctx=Depends(get_ctx)):
     filters = {"project_id": project_id} if project_id else {}
     if project_id:
         await repo.get("projects", project_id)
-    data = {"projects": await repo.list("projects")}
+    data = {"truncated_collections": []}
+    async def visible_rows(collection, query=None):
+        rows = await repo.list(collection, query, limit=1001)
+        if len(rows) > 1000:
+            data["truncated_collections"].append(collection)
+        return rows[:1000]
+    data["projects"] = await visible_rows("projects")
     for collection in ("scopes", "assets", "assessments", "jobs", "findings", "tasks", "evidence", "reports"):
-        data[collection] = await repo.list(collection, filters)
+        data[collection] = await visible_rows(collection, filters)
     for job in data["jobs"]:
         job.pop("raw_output", None)
     data["audit"] = await repo.list("audit_events", limit=100)
@@ -229,9 +235,9 @@ async def comparison(assessment_id: str, ctx=Depends(get_ctx)):
     if not current.get("baseline_id"):
         raise HTTPException(400, "This assessment has no retest baseline")
     baseline = await repo.get("assessments", current["baseline_id"])
-    before = await repo.list("findings", {"assessment_id": baseline["id"]})
-    after = await repo.list("findings", {"assessment_id": assessment_id})
-    jobs = await repo.list("jobs", {"assessment_id": assessment_id, "status": "completed", "source": "execution"})
+    before = await repo.complete_list("findings", {"assessment_id": baseline["id"]})
+    after = await repo.complete_list("findings", {"assessment_id": assessment_id})
+    jobs = await repo.complete_list("jobs", {"assessment_id": assessment_id, "status": "completed", "source": "execution"})
     coverage = {(j["asset_id"], j["scanner"]) for j in jobs}
     old = {f["fingerprint"]: f for f in before}
     new = {f["fingerprint"]: f for f in after}

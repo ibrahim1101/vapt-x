@@ -53,3 +53,15 @@ Published three commits via the GitHub connector after shell push lacked credent
 Added strict base64 parsing, missing/duplicate-file handling and stored SHA-256 comparison before PDF downloads. A regression checks successful downloads plus missing, malformed, duplicate and tampered payloads; failed downloads do not emit successful download audit events. Existing organization-scoped report/file retrieval is retained.
 
 Follow-up local suite: `cd backend && /tmp/vaptx-venv/bin/python -m pytest tests -q` → **15 passed, 1 skipped**, with the Mongo test skipped locally. Fresh dependency reinstall succeeded. Full frontend build, Docker image build, browser E2E, large-report completeness and live external integrations remain unverified. PR remains a draft; no merge or release.
+
+## 2026-10-15 UTC — core workflow and authorization hardening
+
+The PDF integrity follow-up passed [CI run 38663841633](https://github.com/ibrahim1101/vapt-x/actions/runs/38663841633).
+
+Implemented atomic refresh-session consumption with expiry checking; added concurrent replay tests. Scope validation now also verifies scope/project identity. Network-free transport tests cover public DNS resolution, mixed/private answers, exact-host permissions and time windows, pinned IP/Host/SNI, disabled redirects/environment proxies and bounded response bodies.
+
+Import adapters now validate nested JSON structure and UTF-8 size/finding limits, support Nmap's inert standard DOCTYPE while rejecting entities/external declarations, prefer IP to MAC addresses, and reject invalid ports. Eighteen synthetic importer tests cover all five formats; output remains scanner-authored, unverified observations.
+
+Report generation/retest comparisons now request complete datasets up to 5,000 rows per collection and reject larger operations with HTTP 413 instead of silently omitting records. Workspace still returns bounded first-1,000-row lists but adds `truncated_collections` to disclose incomplete datasets. Evidence reads now validate chunk sequence/base64/size; repeated completion cannot bless tampered ready evidence with a replacement digest.
+
+Local result: **50 passed, 1 skipped** via `cd backend && /tmp/vaptx-venv/bin/python -m pytest tests -q`. Expanded disposable Mongo integration now exercises project/scope/asset/assessment creation, scanner import, triage, remediation, evidence, PDF, retest and cross-organization denial; it still requires CI to execute. No external targets scanned. Full frontend dependency installation continues; no successful build is claimed yet.

@@ -114,12 +114,17 @@ async def refresh(request: Request, response: Response):
         payload = decode_token(request.cookies.get("refresh_token", ""))
         if payload.get("type") != "refresh":
             raise ValueError()
-        session = await db.sessions.find_one({"_id": payload["sid"], "user_id": payload["sub"], "revoked": False})
+        # Consume the old session in one database operation. A separate read and
+        # revoke lets concurrent requests mint multiple replacement sessions.
+        session = await db.sessions.find_one_and_update(
+            {"_id": payload["sid"], "user_id": payload["sub"], "revoked": False,
+             "expires_at": {"$gt": iso()}},
+            {"$set": {"revoked": True}},
+        )
         if not session:
             raise ValueError()
     except Exception:
         raise HTTPException(401, "Session expired. Sign in again.")
-    await db.sessions.update_one({"_id": payload["sid"]}, {"$set": {"revoked": True}})
     doc = await db.users.find_one({"_id": payload["sub"]})
     if not doc:
         raise HTTPException(401, "Account not found")

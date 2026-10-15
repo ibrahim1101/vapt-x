@@ -14,6 +14,13 @@ class Repository:
         docs = await db[collection].find(self.query(filters)).sort("created_at", -1).limit(limit).to_list(limit)
         return [DomainDocument.from_mongo(d).model_dump() for d in docs]
 
+    async def complete_list(self, collection, filters=None, max_rows=5000):
+        """Return a bounded complete set or fail; never silently truncate reports."""
+        rows = await self.list(collection, filters, limit=max_rows + 1)
+        if len(rows) > max_rows:
+            raise HTTPException(413, f"Too many {collection} for this operation (maximum {max_rows}); narrow the assessment")
+        return rows
+
     async def get(self, collection, oid):
         doc = await db[collection].find_one(self.query({"_id": oid}))
         if not doc:

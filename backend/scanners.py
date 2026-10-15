@@ -42,6 +42,8 @@ async def validate_scope(repo, assessment, asset, scanner):
     if asset["project_id"] != assessment["project_id"] or asset["id"] not in assessment["asset_ids"]:
         raise HTTPException(400, "Asset does not belong to this assessment")
     scope = await repo.get("scopes", asset["scope_id"])
+    if scope["project_id"] != assessment["project_id"]:
+        raise HTTPException(403, "Scope does not belong to this assessment's project")
     current = datetime.now(timezone.utc)
     if not scope.get("authorized") or not (datetime.fromisoformat(scope["starts_at"]) <= current <= datetime.fromisoformat(scope["ends_at"])):
         raise HTTPException(403, "Scope is not authorized or is outside its approved time window")
