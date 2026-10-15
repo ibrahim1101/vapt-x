@@ -51,6 +51,18 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await page.getByTestId('new-project').click();
   await page.getByTestId('field-name').fill('Synthetic training project');
   const project = await saveModal(page, '/projects');
+  await page.getByTestId(`edit-project-${project.id}`).click();
+  await page.getByTestId('field-owner').fill('Synthetic project team');
+  await page.getByTestId('field-status').selectOption('archived');
+  await saveModal(page, `/projects/${project.id}`, 'PATCH');
+  await expect(page.getByTestId(`edit-project-${project.id}`)).toHaveCount(0);
+  await page.getByTestId('field-project-status').selectOption('archived');
+  await page.getByTestId('field-project-search').fill('Synthetic project team');
+  await page.getByTestId(`edit-project-${project.id}`).click();
+  await page.getByTestId('field-status').selectOption('active');
+  await saveModal(page, `/projects/${project.id}`, 'PATCH');
+  await page.getByTestId('field-project-status').selectOption('active');
+  await expect(page.getByTestId(`edit-project-${project.id}`)).toBeVisible();
   await page.getByTestId('project-filter').selectOption(project.id);
 
   await page.getByTestId('nav-assets-scope').click();
@@ -142,6 +154,47 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   expect(csv).toContain('confirmed');
 
   await page.screenshot({ path: testInfo.outputPath('reports-page.png'), fullPage: true });
+
+  await page.getByTestId('nav-findings').click();
+  await page.getByTestId(`findings-row-${findingId}`).click();
+  await page.getByTestId('finding-task').click();
+  await page.getByTestId('field-title').fill('Review synthetic CI remediation');
+  await page.getByTestId('field-assignee').fill('Synthetic CI team');
+  await page.getByTestId('field-due_date').fill('2027-01-01');
+  const task = await saveModal(page, '/tasks');
+  await page.getByTestId('nav-remediation').click();
+  await expect(page.getByTestId(`task-${task.id}`)).toContainText('Synthetic CI team');
+  const moved = page.waitForResponse(r => r.url().endsWith(`/api/tasks/${task.id}`) && r.request().method() === 'PATCH');
+  await page.getByTestId(`field-task-status-${task.id}`).selectOption('done');
+  expect((await moved).ok()).toBeTruthy();
+  await expect(page.getByTestId(`field-task-status-${task.id}`)).toHaveValue('done');
+
+  await page.getByTestId('nav-assessments').click();
+  const retested = page.waitForResponse(r => r.url().endsWith(`/api/assessments/${assessment.id}/retest`) && r.request().method() === 'POST');
+  await page.getByTestId(`retest-${assessment.id}`).click();
+  const retestResponse = await retested;
+  expect(retestResponse.ok()).toBeTruthy();
+  const retest = await retestResponse.json();
+  await page.getByTestId(`compare-${retest.id}`).click();
+  await expect(page.getByTestId('comparison-not_retested')).toContainText(fixtureTitle);
+  await expect(page.getByTestId('comparison-not_observed').locator('strong')).toHaveText('0');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  // A separate organization must not see or mutate the first tenant's resources.
+  await page.getByTestId('nav-organization').click();
+  await page.getByTestId('create-organization').click();
+  await page.getByTestId('field-name').fill('Synthetic isolated organization');
+  const isolatedOrg = await saveModal(page, '/organizations');
+  const denied = await page.evaluate(async ({ projectId, assessmentId, findingId, orgId }) => {
+    const headers = { 'X-Org-Id': orgId };
+    const paths = [`/workspace?project_id=${projectId}`, `/assessments/${assessmentId}/findings/export?format=json`, `/findings/${findingId}/history`];
+    return Promise.all(paths.map(async path => (await fetch(`/api${path}`, { headers })).status));
+  }, { projectId: project.id, assessmentId: assessment.id, findingId, orgId: isolatedOrg.id });
+  expect(denied).toEqual([404, 404, 404]);
+  await page.getByTestId('nav-findings').click();
+  await expect(page.getByTestId(`findings-row-${findingId}`)).toHaveCount(0);
+  await page.getByTestId('organization-select').selectOption({ label: 'Synthetic CI Organization' });
+
 
   const otherContext = await browser.newContext({ baseURL: 'http://localhost:3000' });
   try {

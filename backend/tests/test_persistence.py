@@ -57,6 +57,14 @@ class PersistenceTests(unittest.TestCase):
                         'authorization_reference': 'Synthetic integration fixture', 'authorized': True,
                         'starts_at': (now-timedelta(hours=1)).isoformat(), 'ends_at': (now+timedelta(hours=1)).isoformat(),
                         'allowed_scanners': ['safe', 'semgrep']})
+                    response = client.patch('/api/projects/' + project['id'], headers=headers(),
+                        json={'name': 'Updated fixture project', 'description': 'Retained context', 'owner': 'Fixture team', 'status': 'archived'})
+                    assert response.status_code == 200, response.text
+                    saved = mongo[database].projects.find_one({'_id': project['id'], 'org_id': org['id']})
+                    assert saved['owner'] == 'Fixture team' and saved['status'] == 'archived'
+                    response = client.patch('/api/projects/' + project['id'], headers=headers(),
+                        json={'name': 'Updated fixture project', 'owner': 'Fixture team', 'status': 'active'})
+                    assert response.status_code == 200, response.text
                     asset = post('assets', {'project_id': project['id'], 'scope_id': scope['id'],
                         'name': 'Owned fixture', 'target': 'training://local'})
                     assessment = post('assessments', {'project_id': project['id'], 'name': 'Fixture assessment', 'asset_ids': [asset['id']]})
@@ -168,6 +176,8 @@ class PersistenceTests(unittest.TestCase):
                     response = client.post('/api/scopes/' + scope['id'] + '/revoke', headers=headers(), json={'reason': 'Foreign tenant attempt'})
                     assert response.status_code == 404
                     response = client.post('/api/auth/sessions/' + alice_session_id + '/revoke', headers=headers())
+                    assert response.status_code == 404
+                    response = client.patch('/api/projects/' + project['id'], headers=headers(), json={'name': 'Foreign edit'})
                     assert response.status_code == 404
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])

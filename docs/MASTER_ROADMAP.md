@@ -54,3 +54,5 @@ Complete responsive and keyboard-accessible UI workflows; verify PDF layout, lar
 ## Next-session handoff
 
 Read the development log and feature matrix; inspect current branch/PR/CI state; reproduce the recorded checks. Prioritize security/correctness, blockers, user value and testability. Work on independent modules in parallel only when authorized, and serialize Git writes and migrations. End each session with accurate evidence and reviewable commits; no claim of indefinite background work.
+
+Continuation: project metadata editing/archive/owner labels and loaded-register search implemented. Next: asset metadata management and server-side inventory/finding pagination. Extended browser remediation/retest/tenant checks are pending CI evidence.

@@ -32,3 +32,5 @@ A limited local demonstration can be considered only after startup and the selec
 - Obtain explicit approval for a sensitive deployment or release publication; ordinary development/PR work may continue autonomously.
 
 Verified Docker evidence: [run 38691459505](https://github.com/ibrahim1101/vapt-x/actions/runs/38691459505) built the API image, started healthy MongoDB/API containers, checked non-root UID/dependencies, and cleaned up. Backend [run 38691459362](https://github.com/ibrahim1101/vapt-x/actions/runs/38691459362) passed 54 tests on Python 3.11 and 3.12, including exports. No production deployment has been performed.
+
+Continuation evidence: all four workflows at `ee7da7e`, including Chromium, succeeded. Project management and expanded browser coverage added afterward await new CI; production release decision remains unchanged.

@@ -21,6 +21,18 @@ class ProjectInput(BaseModel):
     description: str = Field(default="", max_length=3000)
 
 
+class ProjectUpdate(ProjectInput):
+    status: Literal["active", "archived"] = "active"
+    owner: str = Field(default="", max_length=150)
+
+    @field_validator("name")
+    @classmethod
+    def meaningful_name(cls, value):
+        if len(value.strip()) < 2:
+            raise ValueError("Provide a project name of at least two characters")
+        return value.strip()
+
+
 class ScopeInput(BaseModel):
     project_id: str
     target: str = Field(max_length=500)
@@ -125,6 +137,12 @@ async def workspace(project_id: str | None = None, ctx=Depends(get_ctx)):
 async def create_project(body: ProjectInput, ctx=Depends(get_ctx)):
     ctx.require("write")
     return await Repository(ctx).add("projects", {**body.model_dump(), "status": "active"})
+
+
+@router.patch("/projects/{project_id}")
+async def update_project(project_id: str, body: ProjectUpdate, ctx=Depends(get_ctx)):
+    ctx.require("write")
+    return await Repository(ctx).update("projects", project_id, body.model_dump())
 
 
 @router.post("/scopes")

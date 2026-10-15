@@ -56,3 +56,7 @@ Priority: P0 security/startup blockers, P1 core product, P2 expansion, P3 later 
 | Finding triage history | Findings | P1 | In progress | Nine unit tests plus real Mongo history and frontend component CI pass | Latest 100 retained, total reported; pre-tracking history not reconstructed | `backend/workflow.py`, `frontend/src/components/finding-history.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
 
 A feature becomes **Verified working** only for a stated tested scope. API integration evidence does not establish browser functionality, live scanner coverage, or production readiness.
+
+### Continued product management
+
+Project editing, archive/restore and owner labels now persist through an organization-scoped, write-permission-protected PATCH endpoint with audit events. Register search matches name/description/owner among loaded projects; status filtering defaults to active. Existing 1,000-project workspace limit still applies. Ownership labels do not grant permissions. Four focused backend tests pass; extended Mongo/Chromium verification pending.
