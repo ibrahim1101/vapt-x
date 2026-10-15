@@ -51,7 +51,7 @@ def _json(content):
 
 
 def parse_report(scanner, content):
-    if scanner not in {"nmap", "nuclei", "semgrep", "trivy", "zap"}:
+    if scanner not in {"nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov"}:
         raise ValueError("Unsupported scanner report format")
     if not isinstance(content, str) or not content.strip():
         raise ValueError("Report must contain text")
@@ -63,6 +63,55 @@ def parse_report(scanner, content):
         if len(rows) >= MAX_FINDINGS:
             raise ValueError("Maximum 2,000 findings per import")
         rows.append(row)
+
+    if scanner == "gitleaks":
+        for item in _array(_json(content), "Gitleaks report"):
+            x = _object(item, "Gitleaks finding")
+            rule = _required(x.get("RuleID"), "Gitleaks RuleID")
+            path = _required(x.get("File"), "Gitleaks File")
+            line = x.get("StartLine", 1)
+            if not isinstance(line, int) or isinstance(line, bool) or line < 1:
+                raise ValueError("Gitleaks StartLine must be a positive integer")
+            row = finding(_text(x.get("Description"), "Gitleaks Description", rule), "high",
+                f"{rule}:{line}", f"{path}:{line}",
+                "Imported Gitleaks secret candidate. Secret and Match values are omitted. Credential validity is not verified.",
+                "Review the source location, revoke exposed credentials if confirmed, and remove them from source/history.")
+            # Even a filename or description may repeat the detected value.
+            sensitive = [x.get(key) for key in ("Secret", "Match") if isinstance(x.get(key), str) and x.get(key)]
+            for key, value in row.items():
+                if isinstance(value, str):
+                    for secret in sorted(sensitive, key=len, reverse=True):
+                        value = value.replace(secret, "[REDACTED]")
+                    row[key] = value
+            row["cve_ids"] = []
+            row["cwe_ids"] = []
+            row["severity_source"] = "normalization_default"
+            append(row)
+        return rows
+    if scanner == "checkov":
+        payload = _json(content)
+        reports = payload if isinstance(payload, list) else [payload]
+        for report in reports:
+            report = _object(report, "Checkov report")
+            results = _object(report.get("results"), "Checkov results")
+            for item in _array(results.get("failed_checks", []), "Checkov failed_checks"):
+                x = _object(item, "Checkov failed check")
+                rule = _required(x.get("check_id"), "Checkov check_id")
+                path = _required(x.get("file_path"), "Checkov file_path")
+                check_result = _object(x.get("check_result", {}), "Checkov check_result")
+                if check_result.get("result", "FAILED") != "FAILED":
+                    raise ValueError("Checkov failed_checks contains a non-failed result")
+                lines = _array(x.get("file_line_range", []), "Checkov file_line_range", nullable=True)
+                if lines and (len(lines) != 2 or any(not isinstance(n, int) or isinstance(n, bool) or n < 0 for n in lines)):
+                    raise ValueError("Invalid Checkov line range")
+                location = f"{path}:{lines[0]}" if lines else path
+                severity = _text(x.get("severity"), "Checkov severity", "medium")
+                row = finding(_text(x.get("check_name"), "Checkov check_name", rule), severity,
+                    rule + ":" + _text(x.get("resource"), "Checkov resource"), location,
+                    "Imported Checkov policy failure. Code blocks and raw report are omitted to avoid retaining inline secrets. This is not independently verified.")
+                row["severity_source"] = "scanner" if severity.lower() in SEVERITIES and x.get("severity") else "normalization_default"
+                append(row)
+        return rows
 
     if scanner == "nmap":
         # Nmap emits this inert declaration. Never accept a subset, entity or URL.

@@ -60,7 +60,7 @@ class PersistenceTests(unittest.TestCase):
                     scope = post('scopes', {'project_id': project['id'], 'target': 'training://local',
                         'authorization_reference': 'Synthetic integration fixture', 'authorized': True,
                         'starts_at': (now-timedelta(hours=1)).isoformat(), 'ends_at': (now+timedelta(hours=1)).isoformat(),
-                        'allowed_scanners': ['safe', 'semgrep']})
+                        'allowed_scanners': ['safe', 'semgrep', 'gitleaks', 'checkov']})
                     response = client.patch('/api/projects/' + project['id'], headers=headers(),
                         json={'name': 'Updated fixture project', 'description': 'Retained context', 'owner': 'Fixture team', 'status': 'archived'})
                     assert response.status_code == 200, response.text
@@ -215,6 +215,16 @@ class PersistenceTests(unittest.TestCase):
                     assert intel['sources']['epss']['facts']['probability'] == 0.25
                     assert intel['derived_priority']['level'] == 'high'
                     assert mongo[database].findings.find_one({'_id':finding['id']})['verification'] == 'imported-unverified'
+                    for scanner, data in [('gitleaks',[{'RuleID':'synthetic-secret-rule','File':'fixture.env','StartLine':1,
+                        'Description':'Synthetic secret candidate','Secret':'synthetic-secret-do-not-store','Match':'KEY=synthetic-secret-do-not-store'}]),
+                        ('checkov',{'results':{'failed_checks':[{'check_id':'CKV_SYNTHETIC_1','check_name':'Synthetic IaC check',
+                        'file_path':'fixture.tf','file_line_range':[1,2],'code_block':[[1,'synthetic-secret-do-not-store']]}]}})]:
+                        imported = post('imports',{'assessment_id':retried['id'],'asset_id':asset['id'],'scanner':scanner,'content':json.dumps(data)})
+                        assert imported['finding_count'] == 1
+                        assert 'synthetic-secret-do-not-store' not in imported['raw_output']
+                        observed = mongo[database].findings.find_one({'job_id':imported['id']})
+                        assert observed['verification'] == 'imported-unverified'
+                        assert 'synthetic-secret-do-not-store' not in json.dumps(observed)
                     # Navigation must reach findings beyond the workspace's 1,000-row limit.
                     mongo[database].findings.insert_many([{
                         '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],
