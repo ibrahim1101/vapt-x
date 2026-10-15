@@ -14,6 +14,7 @@ from reporting import router as reporting_router
 from analyst import router as analyst_router
 from intelligence import router as intelligence_router
 from inventory_imports import router as inventory_router
+from governance import router as governance_router
 
 
 @asynccontextmanager
@@ -25,6 +26,8 @@ async def lifespan(app):
         for collection in ('project_templates', 'projects', 'scopes', 'assets', 'assessments', 'jobs', 'findings', 'tasks', 'evidence', 'evidence_chunks', 'reports', 'report_files', 'audit_events', 'ai_sessions'):
             await db[collection].create_index([('org_id', 1), ('created_at', -1)])
         await db.findings.create_index([('org_id', 1), ('project_id', 1), ('created_at', -1), ('_id', -1)])
+        await db.sla_policies.create_index('org_id',unique=True)
+        await db.finding_comments.create_index([('org_id',1),('finding_id',1),('created_at',-1),('_id',-1)])
         await db.inventory_items.create_index([('org_id',1),('asset_id',1),('fingerprint',1)],unique=True)
         await db.evidence_chunks.create_index([('org_id', 1), ('evidence_id', 1), ('index', 1)], unique=True)
         await db.jobs.update_many({'status': {'$in': ['queued', 'running', 'cancelling']}}, {'$set': {'status': 'interrupted', 'error': 'Worker restarted before completion; run again.', 'finished_at': iso()}})
@@ -90,3 +93,5 @@ for router in (auth_router, workflow_router, evidence_router, reporting_router, 
 app.include_router(intelligence_router)
 
 app.include_router(inventory_router)
+
+app.include_router(governance_router)

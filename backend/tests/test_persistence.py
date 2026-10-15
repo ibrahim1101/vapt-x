@@ -237,6 +237,14 @@ class PersistenceTests(unittest.TestCase):
                     assert revoked['revocation_reason'] == 'Synthetic engagement completed'
                     blocked = client.post('/api/imports', headers=headers(), json={'assessment_id': assessment['id'], 'asset_id': asset['id'], 'scanner': 'semgrep', 'content': fixture})
                     assert blocked.status_code == 403, blocked.text
+                    comment = post('findings/' + finding['id'] + '/comments', {'text':'Synthetic analyst discussion'})
+                    comments = client.get('/api/findings/' + finding['id'] + '/comments').json()
+                    assert comments['total'] == 1 and comments['items'][0]['id'] == comment['id']
+                    response = client.put('/api/sla-policy', headers=headers(), json={'high':14,'critical':2,'medium':30,'low':90,'info':0})
+                    assert response.status_code == 200, response.text
+                    assert client.get('/api/sla-policy').json()['days']['high'] == 14
+                    page = client.get('/api/findings', params={'assessment_id':assessment['id']}).json()
+                    assert page['items'][0]['sla']['applicable'] is True
                     # Navigation must reach findings beyond the workspace's 1,000-row limit.
                     mongo[database].findings.insert_many([{
                         '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],
@@ -288,6 +296,8 @@ class PersistenceTests(unittest.TestCase):
                     assert client.post('/api/projects', headers=headers(), json={'name':'Foreign template attempt','template_id':template['id']}).status_code == 404
                     assert client.get('/api/findings/' + finding['id'] + '/intelligence/CVE-2026-12345').status_code == 404
                     assert client.get('/api/assets/' + asset['id'] + '/inventory').status_code == 404
+                    assert client.get('/api/findings/' + finding['id'] + '/comments').status_code == 404
+                    assert client.get('/api/sla-policy').json()['days']['high'] == 7
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])
                     assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True

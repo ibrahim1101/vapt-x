@@ -139,6 +139,11 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
 
 
   await findingRow.click();
+  await page.getByTestId('finding-comment-text').fill('Synthetic analyst discussion only');
+  const commented = page.waitForResponse(r => r.url().endsWith(`/api/findings/${findingId}/comments`) && r.request().method() === 'POST');
+  await page.getByTestId('post-finding-comment').click();
+  expect((await commented).ok()).toBeTruthy();
+  await expect(page.getByTestId('finding-comments')).toContainText('Synthetic analyst discussion only');
   await page.getByTestId('finding-evidence').click();
   const evidenceText = 'Synthetic CI evidence, not collected from a real target.\n';
   await page.getByTestId('field-file').setInputFiles({ name: 'synthetic-ci-evidence.txt',

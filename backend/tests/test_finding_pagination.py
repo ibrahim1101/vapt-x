@@ -16,6 +16,7 @@ class FindingPaginationTests(unittest.IsolatedAsyncioTestCase):
             repo=repository.return_value
             repo.get=AsyncMock(return_value={'project_id':'project'})
             repo.page=AsyncMock(return_value={'items':[]})
+            self.enterContext(patch.object(workflow,'sla_policy',new_callable=AsyncMock,return_value={'days':{}}))
             await workflow.list_findings(project_id='project',assessment_id='assessment',search=' .* ',
                 severity='high',status='open',scanner='semgrep',offset=1000,limit=25,ctx=self.ctx)
             repo.get.assert_any_await('projects','project')

@@ -13,6 +13,7 @@ from pymongo.errors import PyMongoError
 from repository import Repository
 from scanners import target_host, validate_scope, run_job, SCANNERS, store_findings, JOB_LOCK, ACTIVE_CHECKS
 from importers import parse_report
+from governance import sla_policy,sla_state
 
 router = APIRouter(prefix="/api")
 SCAN_LOCK = JOB_LOCK
@@ -232,7 +233,11 @@ async def list_findings(
     if search.strip():
         expression = {"$regex": re.escape(search.strip()), "$options": "i"}
         filters["$or"] = [{field: expression} for field in ("title", "target", "description")]
-    return await repo.page("findings", filters, offset=offset, limit=limit)
+    result = await repo.page("findings", filters, offset=offset, limit=limit)
+    policy = await sla_policy(ctx)
+    for finding in result["items"]:
+        finding["sla"] = sla_state(finding, policy)
+    return result
 
 
 @router.post("/projects")
