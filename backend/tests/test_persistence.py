@@ -70,6 +70,30 @@ class PersistenceTests(unittest.TestCase):
                     assert workspace['truncated_collections'] == []
                     response = client.patch('/api/findings/' + finding['id'], headers=headers(), json={'status': 'confirmed', 'notes': 'Manually reviewed synthetic fixture'})
                     assert response.status_code == 200, response.text
+                    # Triage must never rewrite provenance or imply independent verification.
+                    import csv, io
+                    export_path = '/api/assessments/' + assessment['id'] + '/findings/export'
+                    response = client.get(export_path, params={'format': 'json'})
+                    assert response.status_code == 200, response.text
+                    assert response.headers['content-type'].startswith('application/json')
+                    assert 'attachment;' in response.headers['content-disposition']
+                    exported = response.json()
+                    assert exported['assessment_id'] == assessment['id']
+                    assert exported['project_id'] == project['id']
+                    assert exported['finding_count'] == 1
+                    json_row = exported['findings'][0]
+                    response = client.get(export_path, params={'format': 'csv'})
+                    assert response.status_code == 200, response.text
+                    assert response.headers['content-type'].startswith('text/csv')
+                    assert 'attachment;' in response.headers['content-disposition']
+                    csv_rows = list(csv.DictReader(io.StringIO(response.text)))
+                    assert len(csv_rows) == 1
+                    for row in [json_row, csv_rows[0]]:
+                        assert row['id'] == finding['id']
+                        assert row['status'] == 'confirmed'
+                        assert row['verification'] == 'imported-unverified'
+                        assert row['source'] == 'import'
+                        assert row['scanner'] == 'semgrep'
                     task = post('tasks', {'finding_id': finding['id'], 'title': 'Fix synthetic fixture'})
                     response = client.patch('/api/tasks/' + task['id'], headers=headers(), json={'status': 'done'})
                     assert response.status_code == 200, response.text
@@ -94,7 +118,7 @@ class PersistenceTests(unittest.TestCase):
                     response = client.post('/api/auth/register', headers=origin, json={'email': 'bob@example.com', 'password': 'integration-password'})
                     assert response.status_code == 200, response.text
                     post('organizations', {'name': 'Bob org'})
-                    for path in ['jobs/' + job['id'], 'evidence/' + evidence['id'] + '/download', 'reports/' + report['id'] + '/download', 'assessments/' + retest['id'] + '/comparison']:
+                    for path in ['jobs/' + job['id'], 'evidence/' + evidence['id'] + '/download', 'reports/' + report['id'] + '/download', 'assessments/' + retest['id'] + '/comparison', 'assessments/' + assessment['id'] + '/findings/export?format=json', 'assessments/' + assessment['id'] + '/findings/export?format=csv']:
                         assert client.get('/api/' + path).status_code == 404, path
                     response = client.patch('/api/findings/' + finding['id'], headers=headers(), json={'status': 'resolved'})
                     assert response.status_code == 404

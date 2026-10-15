@@ -22,3 +22,7 @@ Imports are limited to 2 MB text and 2,000 normalized findings. Exact supported 
 New adapters must define supported target/report types, validation, required scope/roles, execution versus import mode, version detection, normalized findings, timeouts, cancellation, bounded output, audit logs and synthetic fixtures. Executable tools require sandboxed workers and restricted egress. Keep tool-specific semantics rather than flattening every observation into a verified vulnerability.
 
 OpenAPI, Schemathesis, Gitleaks, Checkov, Prowler, MobSF, OSV/NVD/EPSS/KEV enrichment, ticketing, chat notifications, email, SIEM and OpenTelemetry are backlog items. No credentials or paid integrations should be activated implicitly. Core operation must remain available without any AI provider.
+
+## Assessment findings export API
+
+Authenticated users with organization read permission can download JSON or CSV from `/api/assessments/{assessment_id}/findings/export?format=json` (or `csv`). The endpoint verifies assessment ownership, returns at most 5,000 findings as a complete dataset, and rejects larger datasets instead of truncating. JSON schema version 1 includes source/verification labels; CSV text prefixes that could trigger spreadsheet formulas are escaped. Exports are audited. These are private authenticated downloads, not share links.

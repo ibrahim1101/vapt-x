@@ -36,7 +36,7 @@ Priority: P0 security/startup blockers, P1 core product, P2 expansion, P3 later 
 | Retest/baseline comparison | Remediation | P1 | Implemented, untested | Coverage regressions pending | Not-observed does not mean resolved; Complete-set guard at 5,000 rows; larger operations explicitly rejected | `backend/workflow.py`, `frontend/src/components/workspace-pages.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
 | Evidence chunks/signatures/checksums/download | Evidence | P0 | Implemented, untested | Chunk integrity and ready-file tamper regression pass; concurrency coverage incomplete | 10 MiB/file; no retention/tenant quota/malware scanning | `backend/evidence.py`, `frontend/src/lib/api.js` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
 | Stored PDF report snapshots | Reporting | P1 | Implemented, untested | Generation/layout/API pending | Download integrity regression passes; generation/layout unverified; 5,000-row complete-set cap; one template | `backend/reporting.py`, `frontend/src/components/workspace-pages.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Branding/report scheduling/sharing/CSV/JSON | Reporting | P2 | Not started | None | No public sharing controls or exporters | — | — |
+| Branding/report scheduling/sharing | Reporting | P2 | Not started | None | No public sharing controls or template branding | — | — |
 | Optional Claude analyst/history | AI | P1 | Implemented, untested | Live provider not invoked | Key/SDK required; at most 30 findings; no secret redaction | `backend/analyst.py`, `frontend/src/components/workspace-pages.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
 | Multi-provider/local AI/cost visibility | AI | P2 | Not started | None | Provider map only includes Claude | `backend/analyst.py` | — |
 | Dashboard/severity chart/search/theme/responsive nav | UI/analytics | P1 | Implemented, untested | Browser/accessibility pending | Counts reflect loaded rows; no historical/coverage scoring | `frontend/src/App.js`, `frontend/src/components/dashboard.jsx`, `frontend/src/App.css` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
@@ -50,3 +50,10 @@ Priority: P0 security/startup blockers, P1 core product, P2 expansion, P3 later 
 | Desktop packaging | Release | P3 | Deferred | None | Web stability first | — | — |
 
 A feature becomes **Verified working** only for a stated tested scope. Passing helper tests does not establish browser functionality, persistence, full authorization or absence of unrelated regressions. Use **Blocked** when a concrete dependency prevents the next required check, and document it in the development log.
+
+### Continued implementation, 2026-10-15
+
+| Feature | Category | Priority | Implementation status | Test status | Known limitations | Relevant source files | Related pull request |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Assessment finding CSV/JSON export | Reporting | P1 | In progress | Backend unit tests pass; expanded Mongo integration pending CI; UI build pending | Complete set limited to 5,000; CSV formula cells escaped; no public sharing | `backend/reporting.py`, `frontend/src/components/finding-exports.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
+| Core import/evidence/PDF/retest/tenant workflow | Quality | P0 | Verified working | 51 tests pass in Python 3.11/3.12 CI with MongoDB | API integration only; browser and live external scanning remain unverified | `backend/tests/test_persistence.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |

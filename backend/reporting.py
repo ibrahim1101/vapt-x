@@ -98,3 +98,51 @@ async def download_report(report_id: str, ctx=Depends(get_ctx)):
         raise HTTPException(409, "Report file integrity verification failed")
     await audit(ctx, "report.downloaded", "reports", report_id)
     return Response(raw, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="VAPT-X-{report_id[:8]}.pdf"'})
+
+
+EXPORT_FIELDS = (
+    'id', 'title', 'severity', 'status', 'verification', 'source', 'scanner',
+    'target', 'asset_id', 'assessment_id', 'project_id', 'rule_id',
+    'description', 'remediation', 'notes', 'created_at',
+)
+
+
+def csv_cell(value):
+    """Prevent imported text from becoming spreadsheet formulas on CSV open."""
+    text = '' if value is None else str(value)
+    if text.lstrip().startswith(('=', '+', '-', '@')) or text.startswith(('\t', '\r', '\n')):
+        return "'" + text
+    return text
+
+
+@router.get('/assessments/{assessment_id}/findings/export')
+async def export_findings(assessment_id: str, format: str = 'json', ctx=Depends(get_ctx)):
+    from fastapi import HTTPException
+    import csv
+    import json
+    from io import StringIO
+    ctx.require('read')
+    if format not in {'json', 'csv'}:
+        raise HTTPException(422, 'Export format must be json or csv')
+    repo = Repository(ctx)
+    assessment = await repo.get('assessments', assessment_id)
+    findings = await repo.complete_list('findings', {'assessment_id': assessment_id})
+    rows = [{key: finding.get(key) for key in EXPORT_FIELDS} for finding in findings]
+    notice = 'Scanner observations and imported reports are not proof of exploitability. Verification and provenance are recorded separately.'
+    if format == 'json':
+        body = json.dumps({'schema_version': 1, 'assessment_id': assessment_id,
+            'project_id': assessment['project_id'], 'generated_at': iso(),
+            'notice': notice, 'finding_count': len(rows), 'findings': rows}, ensure_ascii=False)
+        media_type = 'application/json'
+    else:
+        output = StringIO(newline='')
+        writer = csv.writer(output)
+        writer.writerow(EXPORT_FIELDS)
+        writer.writerows([[csv_cell(row[key]) for key in EXPORT_FIELDS] for row in rows])
+        body = output.getvalue()
+        media_type = 'text/csv'
+    await audit(ctx, 'findings.exported', 'assessments', assessment_id, {'format': format, 'finding_count': len(rows)})
+    return Response(body, media_type=media_type, headers={
+        'Content-Disposition': f'attachment; filename="VAPT-X-findings.{format}"',
+        'X-Content-Type-Options': 'nosniff',
+    })

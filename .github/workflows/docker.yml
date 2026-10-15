@@ -1,0 +1,65 @@
+name: Docker smoke
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_FILE: compose.local.yml
+      COMPOSE_PROJECT_NAME: vaptx-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      VAPTX_API_PORT: "18001"
+      VAPTX_MONGO_PORT: "27019"
+      VAPTX_INSTALL_AI: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create disposable CI configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          cat > "$RUNNER_TEMP/vaptx-smoke.env" <<'ENV'
+          MONGO_URL=mongodb://mongodb:27017
+          DB_NAME=vaptx_ci_smoke
+          JWT_SECRET=ci-only-synthetic-secret-never-use-outside-tests-123456789
+          ADMIN_EMAIL=smoke@example.com
+          ADMIN_PASSWORD=ci-only-synthetic-password
+          FRONTEND_URL=http://localhost:3000
+          INTERNAL_API_URL=http://127.0.0.1:8001
+          NMAP_BINARY=nmap
+          VAPTX_LOCAL_HTTP=1
+          MONGO_TIMEOUT_MS=5000
+          ENV
+          cp "$RUNNER_TEMP/vaptx-smoke.env" backend/.env
+      - name: Validate Compose and build API image
+        run: |
+          docker compose --profile api config --quiet
+          docker compose --profile api build api
+      - name: Start MongoDB 7 and API and wait for health checks
+        run: docker compose --profile api up --detach --wait --wait-timeout 180
+      - name: Verify API and container runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "http://127.0.0.1:${VAPTX_API_PORT}/api/live" | jq --exit-status '.status == "ok" and .service == "VAPT-X"'
+          curl --fail --silent --show-error "http://127.0.0.1:${VAPTX_API_PORT}/api/health" | jq --exit-status '.status == "ok" and .service == "VAPT-X"'
+          docker compose exec -T api python -c 'import os; assert os.getuid() == 10001, "API must run as the unprivileged app user"'
+          docker compose exec -T api python -m pip check
+          docker compose exec -T mongodb mongosh --quiet --eval 'if (db.adminCommand({ping: 1}).ok !== 1) { quit(1); }'
+      - name: Container diagnostics
+        if: failure()
+        run: |
+          docker compose --profile api ps --all
+          docker compose --profile api logs --no-color --tail 150
+      - name: Remove containers, network, volumes and temporary configuration
+        if: always()
+        shell: bash
+        run: |
+          trap 'rm -f backend/.env "$RUNNER_TEMP/vaptx-smoke.env"' EXIT
+          docker compose --profile api down --volumes --remove-orphans --timeout 20

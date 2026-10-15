@@ -226,3 +226,56 @@ class EvidenceIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 await evidence.complete('e1', Ctx({'id': 'alice'}, 'org-a', 'analyst'))
             self.assertEqual(error.exception.status_code, 409)
             repo_cls.return_value.update.assert_not_awaited()
+
+
+class FindingExportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_csv_quotes_spreadsheet_formulas_and_retains_provenance(self):
+        import csv
+        import io
+        import reporting
+        from core import Ctx
+        row = {'id': 'finding-1', 'title': '  =HYPERLINK("example")', 'description': 'multi\nline, text',
+               'verification': 'imported-unverified', 'source': 'import', 'password_hash': 'must-not-export'}
+        with patch.object(reporting, 'Repository') as repo_cls, patch.object(reporting, 'audit', AsyncMock()):
+            repo = repo_cls.return_value
+            repo.get = AsyncMock(return_value={'project_id': 'project-a'})
+            repo.complete_list = AsyncMock(return_value=[row])
+            response = await reporting.export_findings('assessment-a', 'csv', Ctx({'id': 'alice'}, 'org-a', 'viewer'))
+            data = list(csv.DictReader(io.StringIO(response.body.decode())))
+            self.assertEqual(data[0]['title'], "'" + row['title'])
+            self.assertEqual(data[0]['description'], row['description'])
+            self.assertEqual(data[0]['verification'], 'imported-unverified')
+            self.assertNotIn('password_hash', data[0])
+            repo.get.assert_awaited_once_with('assessments', 'assessment-a')
+            repo.complete_list.assert_awaited_once_with('findings', {'assessment_id': 'assessment-a'})
+
+    async def test_json_preserves_original_text_and_schema(self):
+        import json
+        import reporting
+        from core import Ctx
+        row = {'title': '=original', 'verification': 'observed', 'source': 'execution'}
+        with patch.object(reporting, 'Repository') as repo_cls, patch.object(reporting, 'audit', AsyncMock()):
+            repo_cls.return_value.get = AsyncMock(return_value={'project_id': 'project-a'})
+            repo_cls.return_value.complete_list = AsyncMock(return_value=[row])
+            response = await reporting.export_findings('assessment-a', 'json', Ctx({'id': 'alice'}, 'org-a', 'viewer'))
+            data = json.loads(response.body)
+            self.assertEqual(data['schema_version'], 1)
+            self.assertEqual(data['finding_count'], 1)
+            self.assertEqual(data['findings'][0]['title'], '=original')
+            self.assertIn('provenance', data['notice'])
+
+    async def test_foreign_assessment_and_unsupported_format_are_denied(self):
+        import reporting
+        from core import Ctx
+        from fastapi import HTTPException
+        ctx = Ctx({'id': 'alice'}, 'org-a', 'viewer')
+        with self.assertRaises(HTTPException) as error:
+            await reporting.export_findings('assessment-a', 'xml', ctx)
+        self.assertEqual(error.exception.status_code, 422)
+        with patch.object(reporting, 'Repository') as repo_cls:
+            repo_cls.return_value.get = AsyncMock(side_effect=HTTPException(404, 'Not found'))
+            repo_cls.return_value.complete_list = AsyncMock()
+            with self.assertRaises(HTTPException) as error:
+                await reporting.export_findings('foreign', 'json', ctx)
+            self.assertEqual(error.exception.status_code, 404)
+            repo_cls.return_value.complete_list.assert_not_awaited()
