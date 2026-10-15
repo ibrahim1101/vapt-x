@@ -3,7 +3,7 @@
 ## Start and explore
 Sign in with the owner credentials configured in the backend environment, or register an email/password account. A newly registered user creates an organization; organization admins can add already-registered users. A user may belong to multiple organizations; role permissions are resolved for the active organization on every request.
 
-An initial **Controlled training lab** project is included in the owner's workspace. Its findings come from an actual check against the application-owned `training://local` target, not simulated results or a scan of a third-party website. This intentionally minimal, non-sensitive training response omits protective headers.
+Create a project and explicitly authorize the application-owned `training://local` target for controlled checks. Startup seeds an owner account, not a populated training project or findings. The training response is intentionally minimal and non-sensitive and omits protective headers; observations are created only when a check actually runs.
 
 ## Core workflow
 1. Create a project.
@@ -41,9 +41,12 @@ An initial **Controlled training lab** project is included in the owner's worksp
 - Claude failures return a clear error; provider balance/availability may require attention. Only Claude is integrated; other adapters are backlog.
 
 ## Environment and persistence
-Preserve the configured `MONGO_URL`, `DB_NAME`, and frontend `REACT_APP_BACKEND_URL`. Backend needs `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `FRONTEND_URL`, `EMERGENT_LLM_KEY`, `CLAUDE_MODEL`, `INTERNAL_API_URL`, and `NMAP_BINARY`. Never expose their values in documentation or frontend code. Owner seeding is insert-only and never resets a changed password on startup.
+Preserve the configured `MONGO_URL`, `DB_NAME`, and frontend `REACT_APP_BACKEND_URL`. Backend needs `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `FRONTEND_URL`, `INTERNAL_API_URL`, and `NMAP_BINARY`. Optional Claude use additionally requires `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, and the separate `backend/requirements-ai.txt` installation. Never expose their values in documentation or frontend code. Owner seeding is insert-only and never resets a changed password on startup.
 
-FastAPI is supervisor-managed on port 8001, frontend on 3000. All routes use `/api`. Restart services only through supervisor. Nmap is an OS dependency and may be absent in a new deployment; the app then reports it unavailable instead of fabricating success. Python dependencies are recorded in backend/requirements.txt. No authentication tokens in localStorage; secure HttpOnly cookies, CSRF token + Origin checks, persisted revocable sessions. LocalStorage holds only non-secret organization ID and theme preference.
+For local development, run FastAPI on port 8001 with one worker and the frontend on 3000. See [Windows setup](docs/WINDOWS_LOCAL_DEV.md) and the optional Compose API profile; supervisor is not a project prerequisite. All routes use `/api`. `/api/live` reports process liveness and `/api/health` checks database readiness. Nmap is an OS dependency and may be absent in a new deployment; the app then reports it unavailable instead of fabricating success. Python dependencies are recorded in backend/requirements.txt. No authentication tokens in localStorage; secure HttpOnly cookies, CSRF token + Origin checks, persisted revocable sessions. LocalStorage holds only non-secret organization ID and theme preference.
 
 ## Backlog (not claimed implemented)
 MFA/TOTP; email verification/recovery; advanced session-management UI; independent authorization approval; granular project permissions; scheduled scans and distributed queue; notification/webhook delivery; API tokens; additional AI providers; external integrations; advanced scanner modules; richer report templates and graphs.
+
+## Engineering status
+See [feature matrix](docs/FEATURE_MATRIX.md), [test evidence](docs/DEVELOPMENT_LOG.md) and [release gates](docs/RELEASE_READINESS.md). Source implementation does not establish end-to-end verification or production readiness.

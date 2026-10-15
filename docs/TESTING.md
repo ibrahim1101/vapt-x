@@ -1,0 +1,50 @@
+# Testing and verification
+
+Audit date: 2026-10-14 UTC. Baseline `a2dcdae` had `backend/pytest.ini` and `tests/__init__.py`, but no executable regression suite found by the audit. Historical `test_result.md`/generated reports are provenance only; they are not evidence that this branch works today.
+
+## Evidence policy
+
+Record the exact command, commit/environment, outcome and scope for each check in [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md). Distinguish syntax, mocked unit tests, database-backed API tests, browser tests and actual scanner execution. Mark unavailable checks blocked rather than passed. Never mark the whole product verified because a narrow test passes.
+
+The current Work environment has no Docker available; do not claim Compose, MongoDB container or Windows verification. Do not connect to a founder's localhost or use a production database for tests.
+
+## Running checks
+
+From the repository root, after installing the branch's declared test dependencies:
+
+```sh
+python -m compileall -q backend
+cd backend
+python -m pytest
+```
+
+`backend/pytest.ini` requires pytest-xdist and configures two workers with loadscope. Keep isolated per-test database names and unique identities; do not depend on shared mutable fixtures. Use project-provided test commands if the implementation adds a more specific suite. A compile check establishes syntax only.
+
+For frontend validation, use the declared Yarn version and a reproducible lockfile, then run the build/test scripts in `frontend/package.json`. Record installation/build failures exactly; dependency resolution is not a successful production build.
+
+## Required regression coverage
+
+| Layer | Required scenarios |
+| --- | --- |
+| Configuration | Missing/invalid values, production HTTPS and secrets, explicit loopback local mode, malformed URLs, AI disabled |
+| Middleware | Origin/CSRF rejection, exact limit, malformed/negative/missing Content-Length, streamed body above limit, security headers, readiness failure without secret disclosure |
+| Authentication | UTF-8 bcrypt byte limit, registration uniqueness, login throttle, valid/expired/revoked tokens, refresh rotation, logout cookies and inactive-account policy |
+| Tenant/roles | Two organizations, guessed foreign IDs, role downgrade, every resource/download, AI session owner, background authorization recheck |
+| Scope/transport | Exact-host/subdomain mismatch, forbidden IP classes, mixed DNS answers, IPv6, pinned Host/SNI, redirects, proxy bypass, approved scanner and time-window bounds |
+| Jobs | Concurrency, restart interruption, failures, subprocess timeout, cancellation cleanup when implemented, duplicate submissions |
+| Imports/findings | All five formats, malformed/empty payloads, XML entities, normalization, attribution, duplicate rules, large findings and pagination |
+| Evidence | Invalid extension/signature/base64/index/size, ownership, incomplete uploads, tampering, cross-tenant download, completion races |
+| Reporting/retest | Source labels, PDF output/layout, missing file/hash mismatch, 2,000+ findings, coverage-aware comparison and import exclusion |
+| AI | Disabled SDK/key behavior, provider timeout, owner/project isolation, context bounds, redaction and prompt injection; mocked provider by default |
+| Browser | Login → organization → project → scope → asset → assessment → scan/import → triage → evidence → remediation → PDF → retest; read-only roles, keyboard/mobile/error states |
+| Operations | Clean install/image build, MongoDB persistence/restart, health degradation, backup/restore drill and secret/dependency checks |
+
+## Controlled integration procedure
+
+Start isolated MongoDB 7; set a unique disposable database and development-only secrets. Run a single API worker. Register two test users/organizations. Use only `training://local` and synthetic report fixtures. Verify records survive API restart; reauthenticate and test ownership boundaries. Run frontend against that API and verify downloads and error states. Explicitly label any not-executed steps. Remove disposable resources only after verifying the exact test database/volume identity.
+
+No live Anthropic calls, third-party scanning or webhook delivery are necessary for default tests. Use mocks to prove limits and error paths; perform authorized live checks separately when infrastructure exists.
+
+## Batch A test layout
+
+`backend/tests/test_foundation.py` covers settings, body limits, readiness, password byte limits, repository tenant-filter enforcement and permission checks with isolated mocks. `backend/tests/test_persistence.py` runs an opt-in MongoDB identity/organization/session flow in a subprocess. Set `MONGO_TEST_URL` only to a disposable MongoDB server; the test creates and drops a uniquely named `vaptx_test_*` database. Without that variable the integration test is skipped. `.github/workflows/backend.yml` provisions MongoDB 7 and runs the suite on Python 3.11 and 3.12; workflow presence is not proof of a passing CI run.
