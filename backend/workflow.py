@@ -2,7 +2,6 @@ import asyncio
 import re
 import os
 import shutil
-from importlib.util import find_spec
 from datetime import date, datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
@@ -14,6 +13,7 @@ from repository import Repository
 from scanners import target_host, validate_scope, run_job, SCANNERS, store_findings, JOB_LOCK, ACTIVE_CHECKS
 from importers import parse_report
 from governance import sla_policy,sla_state
+from ai_providers import public_configuration
 
 router = APIRouter(prefix="/api")
 SCAN_LOCK = JOB_LOCK
@@ -178,7 +178,7 @@ class TaskUpdate(BaseModel):
 @router.get("/capabilities")
 async def capabilities(ctx=Depends(get_ctx)):
     ctx.require("read")
-    return {"safe": True, "nmap": bool(shutil.which(os.environ["NMAP_BINARY"])), "inventory_imports": ["openapi", "cyclonedx", "spdx"], "imports": ["nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov"], "ai": bool(os.environ.get("ANTHROPIC_API_KEY")) and find_spec("anthropic") is not None, "limitations": ["Nmap uses TCP connect on four web ports only; no exploit scripts.", "Remote private networks are blocked. Only the managed training target may use loopback.", "Imports are scanner-authored, unverified evidence, not a fresh scan.", "Interrupted jobs are marked interrupted after a worker restart; re-run manually."]}
+    return {"safe": True, "nmap": bool(shutil.which(os.environ["NMAP_BINARY"])), "inventory_imports": ["openapi", "cyclonedx", "spdx"], "imports": ["nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov"], "ai": any(provider["available"] for provider in public_configuration()), "limitations": ["Nmap uses TCP connect on four web ports only; no exploit scripts.", "Remote private networks are blocked. Only the managed training target may use loopback.", "Imports are scanner-authored, unverified evidence, not a fresh scan.", "Interrupted jobs are marked interrupted after a worker restart; re-run manually."]}
 
 
 @router.get("/workspace")

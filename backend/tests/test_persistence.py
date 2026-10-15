@@ -245,6 +245,15 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/sla-policy').json()['days']['high'] == 14
                     page = client.get('/api/findings', params={'assessment_id':assessment['id']}).json()
                     assert page['items'][0]['sla']['applicable'] is True
+                    # Exercise optional AI persistence through a mock; never contact a paid provider.
+                    from unittest.mock import patch, AsyncMock
+                    with patch.dict(os.environ,{'OPENAI_API_KEY':'synthetic-only-key','OPENAI_MODEL':'synthetic-model'}), patch('analyst.answer',new_callable=AsyncMock,return_value={'text':'AI interpretation: synthetic fixture only','usage':{'input_tokens':20,'output_tokens':10}}):
+                        chat=post('ai/messages',{'project_id':project['id'],'provider':'openai','model':'synthetic-model','message':'Explain password=synthetic-secret'})
+                        assert chat['provider'] == 'openai' and chat['message_count'] == 2
+                        assert 'synthetic-secret' not in json.dumps(chat)
+                        followup=post('ai/messages',{'project_id':project['id'],'session_id':chat['id'],'provider':'openai','model':'synthetic-model','message':'Summarize coverage limitations'})
+                        assert followup['message_count'] == 4 and len(followup['messages']) == 4
+                        assert mongo[database].ai_usage.count_documents({'org_id':org['id']}) == 2
                     # Navigation must reach findings beyond the workspace's 1,000-row limit.
                     mongo[database].findings.insert_many([{
                         '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],

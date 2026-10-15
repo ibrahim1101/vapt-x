@@ -312,6 +312,9 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await login(page, email, password);
   await page.getByTestId('nav-findings').click();
   await expect(page.getByTestId(`findings-row-${findingId}`)).toContainText('confirmed');
+  await page.getByTestId('nav-ai-analyst').click();
+  await expect(page.getByTestId('workspace-content')).toContainText('No AI provider configured');
+  await expect(page.getByTestId('ai-send')).toBeDisabled();
   await page.getByTestId('nav-assets-scope').click();
   await page.getByTestId(`revoke-scope-${scope.id}`).click();
   await page.getByTestId('revocation-reason').fill('Synthetic CI workflow complete; authorization withdrawn.');

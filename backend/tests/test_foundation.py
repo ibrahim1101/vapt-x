@@ -134,12 +134,12 @@ class TenantBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CapabilityTests(unittest.IsolatedAsyncioTestCase):
-    async def test_optional_ai_needs_key_and_sdk(self):
+    async def test_optional_http_ai_needs_a_configured_provider(self):
         import workflow
         from core import Ctx
         ctx = Ctx({'id': 'alice'}, 'org-a', 'viewer')
-        for key, sdk, expected in [('', None, False), ('test-only-key', None, False), ('test-only-key', object(), True)]:
-            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': key}), patch.object(workflow, 'find_spec', return_value=sdk):
+        for key, expected in [('', False), ('test-only-key', True)]:
+            with patch.dict(os.environ, {'ANTHROPIC_API_KEY': key, 'NMAP_BINARY':'nmap'}, clear=True):
                 self.assertEqual((await workflow.capabilities(ctx))['ai'], expected)
 
 
