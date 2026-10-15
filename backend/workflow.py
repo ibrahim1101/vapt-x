@@ -195,6 +195,8 @@ async def workspace(project_id: str | None = None, ctx=Depends(get_ctx)):
             data["truncated_collections"].append(collection)
         return rows[:1000]
     data["projects"] = await visible_rows("projects")
+    if project_id and not any(row["id"] == project_id for row in data["projects"]):
+        data["projects"].append(await repo.get("projects", project_id))
     for collection in ("scopes", "assets", "assessments", "jobs", "findings", "tasks", "evidence", "reports"):
         data[collection] = await visible_rows(collection, filters)
     for job in data["jobs"]:
@@ -238,6 +240,35 @@ async def list_findings(
     for finding in result["items"]:
         finding["sla"] = sla_state(finding, policy)
     return result
+
+
+@router.get("/projects")
+async def list_projects(search: str = Query(default="", max_length=120),
+    status: Literal["active", "archived"] | None = None,
+    offset: int = Query(default=0, ge=0, le=1_000_000),
+    limit: int = Query(default=25, ge=1, le=100), ctx=Depends(get_ctx)):
+    ctx.require("read")
+    repo = Repository(ctx)
+    filters = {}
+    if status:
+        filters["status"] = {"$ne":"archived"} if status == "active" else "archived"
+    if search.strip():
+        pattern = {"$regex":re.escape(search.strip()), "$options":"i"}
+        filters["$or"] = [{field:pattern} for field in ("name","description","owner")]
+    page = await repo.page("projects", filters, offset=offset, limit=limit)
+    ids = [row["id"] for row in page["items"]]
+    async def counts(collection):
+        if not ids: return {}
+        rows = await db[collection].aggregate([
+            {"$match":repo.query({"project_id":{"$in":ids}})},
+            {"$group":{"_id":"$project_id", "count":{"$sum":1}}},
+        ], maxTimeMS=10000).to_list(limit)
+        return {row["_id"]:row["count"] for row in rows}
+    assets, assessments = await asyncio.gather(counts("assets"),counts("assessments"))
+    for row in page["items"]:
+        row["asset_count"] = assets.get(row["id"],0)
+        row["assessment_count"] = assessments.get(row["id"],0)
+    return page
 
 
 @router.post("/projects")

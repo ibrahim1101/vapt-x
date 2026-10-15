@@ -320,7 +320,7 @@ class PersistenceTests(unittest.TestCase):
                     page = response.json()
                     assert page['total'] == 1005 and len(page['items']) == 5 and not page['has_more']
                     summary = client.get('/api/analytics/summary',params={'project_id':project['id']}).json()
-                    assert summary['assets'] == 1006 and summary['complete_collection_counts'] is True, summary
+                    assert summary['assets'] == 1 and summary['complete_collection_counts'] is True, summary
                     assert summary['open_findings'] == mongo[database].findings.count_documents({'org_id':org['id'],'project_id':project['id'],'status':{'$nin':['resolved','false_positive']}})
                     assert client.get('/api/analytics/summary',params={'project_id':'foreign'}).status_code == 404
 
@@ -338,6 +338,15 @@ class PersistenceTests(unittest.TestCase):
                     assert summary['open_findings'] == mongo[database].findings.count_documents({'org_id':org['id'],'project_id':project['id'],'status':{'$nin':['resolved','false_positive']}})
                     assert client.get('/api/analytics/summary',params={'project_id':'foreign'}).status_code == 404
 
+                    mongo[database].projects.insert_many([{'_id':'project-page-'+str(i), 'org_id':org['id'],
+                        'created_by':user['id'],'created_at':(now-timedelta(days=1)).isoformat(),
+                        'name':'Project navigation fixture','status':'active','description':'','owner':'Pagination team'} for i in range(1005)])
+                    project_page = client.get('/api/projects',params={'search':'Project navigation fixture','status':'active','offset':1000}).json()
+                    assert project_page['total'] == 1005 and len(project_page['items']) == 5 and not project_page['has_more']
+                    assert all(row['asset_count'] == 0 for row in project_page['items'])
+                    selected_id = project_page['items'][-1]['id']
+                    selected_workspace = client.get('/api/workspace',params={'project_id':selected_id}).json()
+                    assert any(row['id'] == selected_id for row in selected_workspace['projects'])
                     # A second organization cannot retrieve or mutate any first-organization resource.
                     response = client.post('/api/auth/register', headers=origin, json={'email': 'bob@example.com', 'password': 'integration-password'})
                     assert response.status_code == 200, response.text

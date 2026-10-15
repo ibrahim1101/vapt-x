@@ -11,7 +11,7 @@ test('overview uses complete server counts instead of loaded arrays',async()=>{
   api.get.mockResolvedValue({data:{open_findings:1200,critical_high:1100,active_jobs:2,completed_jobs:1002,assets:2000,projects:5,by_severity:{critical:100,high:1000,medium:100},notice:'Complete counts'}});
   await act(async()=>root.render(<Dashboard data={data} project="project" navigate={()=>{}} open={()=>{}}/>));
   expect(container.querySelector('[data-testid="risk-total"]').textContent).toBe('1200');
-  expect(container.querySelector('[data-testid="stat-assets-in-scope"]').textContent).toContain('2000');
+  expect(container.querySelector('[data-testid="stat-registered-assets"]').textContent).toContain('2000');
   expect(api.get).toHaveBeenCalledWith('/analytics/summary',{params:{project_id:'project'}});
 });
 test('failed counts show unavailable values and allow retry',async()=>{
