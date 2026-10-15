@@ -181,6 +181,14 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   const task = await saveModal(page, '/tasks');
   await page.getByTestId('nav-remediation').click();
   await expect(page.getByTestId(`task-${task.id}`)).toContainText('Synthetic CI team');
+  await page.getByTestId(`edit-task-${task.id}`).click();
+  await page.getByTestId('field-assignee').fill('Synthetic remediation owner');
+  await page.getByTestId('field-status').selectOption('in_progress');
+  await page.getByTestId('field-progress').fill('60');
+  await saveModal(page, `/tasks/${task.id}`, 'PATCH');
+  await expect(page.getByTestId(`task-${task.id}`)).toContainText('60% complete');
+  await expect(page.getByTestId(`task-${task.id}`)).toContainText('Synthetic remediation owner');
+
   const moved = page.waitForResponse(r => r.url().endsWith(`/api/tasks/${task.id}`) && r.request().method() === 'PATCH');
   await page.getByTestId(`field-task-status-${task.id}`).selectOption('done');
   expect((await moved).ok()).toBeTruthy();

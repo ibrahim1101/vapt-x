@@ -3,7 +3,7 @@ import re
 import os
 import shutil
 from importlib.util import find_spec
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, field_validator
@@ -120,15 +120,38 @@ class TriageInput(BaseModel):
     notes: str = Field(default="", max_length=5000)
 
 
+def valid_due_date(value):
+    if not value:
+        return ""
+    try:
+        return date.fromisoformat(value).isoformat()
+    except ValueError:
+        raise ValueError("Due date must be a calendar date (YYYY-MM-DD)")
+
+
 class TaskInput(BaseModel):
     finding_id: str
     title: str = Field(min_length=2, max_length=200)
     assignee: str = Field(default="", max_length=150)
     due_date: str = Field(default="", max_length=30)
 
+    @field_validator("due_date")
+    @classmethod
+    def calendar_date(cls, value):
+        return valid_due_date(value)
+
 
 class TaskUpdate(BaseModel):
-    status: Literal["todo", "in_progress", "done"]
+    status: Literal["todo", "in_progress", "done"] | None = None
+    title: str | None = Field(default=None, min_length=2, max_length=200)
+    assignee: str | None = Field(default=None, max_length=150)
+    due_date: str | None = Field(default=None, max_length=30)
+    progress: int | None = Field(default=None, ge=0, le=100)
+
+    @field_validator("due_date")
+    @classmethod
+    def calendar_date(cls, value):
+        return valid_due_date(value) if value is not None else value
 
 
 @router.get("/capabilities")
@@ -394,13 +417,32 @@ async def create_task(body: TaskInput, ctx=Depends(get_ctx)):
     ctx.require("remediate")
     repo = Repository(ctx)
     finding = await repo.get("findings", body.finding_id)
-    return await repo.add("tasks", {**body.model_dump(), "project_id": finding["project_id"], "status": "todo"})
+    return await repo.add("tasks", {**body.model_dump(), "project_id": finding["project_id"], "status": "todo", "progress": 0, "completed_at": None})
 
 
 @router.patch("/tasks/{task_id}")
 async def update_task(task_id: str, body: TaskUpdate, ctx=Depends(get_ctx)):
     ctx.require("remediate")
-    return await Repository(ctx).update("tasks", task_id, body.model_dump())
+    repo = Repository(ctx)
+    current = await repo.get("tasks", task_id)
+    fields = body.model_dump(exclude_unset=True)
+    if not fields or any(value is None for value in fields.values()):
+        raise HTTPException(422, "Provide at least one non-null task field; use an empty string to clear assignment or due date")
+    status = fields.get("status", current["status"])
+    if status in {"todo", "done"}:
+        expected = 100 if status == "done" else 0
+        if "progress" in fields and fields["progress"] != expected:
+            raise HTTPException(422, "Todo tasks require 0% progress; done tasks require 100%")
+        fields["progress"] = expected
+    elif status == "in_progress" and current["status"] == "done" and "progress" not in fields:
+        fields["progress"] = 0
+    elif fields.get("progress", current.get("progress", 0)) == 100:
+        raise HTTPException(422, "Mark the task done to record 100% progress")
+    if status == "done" and current["status"] != "done":
+        fields["completed_at"] = iso()
+    elif status != "done":
+        fields["completed_at"] = None
+    return await repo.update("tasks", task_id, fields)
 
 
 @router.get("/assessments")

@@ -142,6 +142,13 @@ class PersistenceTests(unittest.TestCase):
                     task = post('tasks', {'finding_id': finding['id'], 'title': 'Fix synthetic fixture'})
                     response = client.patch('/api/tasks/' + task['id'], headers=headers(), json={'status': 'done'})
                     assert response.status_code == 200, response.text
+                    response = client.patch('/api/tasks/' + task['id'], headers=headers(), json={
+                        'status':'in_progress', 'progress':60, 'assignee':'Synthetic remediation team', 'due_date':'2027-01-01'})
+                    assert response.status_code == 200, response.text
+                    saved_task = mongo[database].tasks.find_one({'_id':task['id']})
+                    assert saved_task['progress'] == 60 and saved_task['completed_at'] is None
+                    assert saved_task['assignee'] == 'Synthetic remediation team'
+                    assert client.patch('/api/tasks/' + task['id'], headers=headers(), json={'due_date':'2026-02-30'}).status_code == 422
                     payload = b'synthetic evidence only'
                     evidence = post('evidence', {'finding_id': finding['id'], 'filename': 'fixture.txt', 'size': len(payload), 'content_type': 'text/plain'})
                     response = client.put('/api/evidence/' + evidence['id'] + '/chunks/0', headers=headers(), json={'data': base64.b64encode(payload).decode()})
