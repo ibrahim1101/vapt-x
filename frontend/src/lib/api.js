@@ -12,7 +12,10 @@ api.interceptors.request.use(config => {
 let refreshing;
 api.interceptors.response.use(r => r, async error => {
   const original = error.config;
-  if (error.response?.status === 401 && !original._retried && !original.url.startsWith('/auth/')) {
+  const retryableUrl = typeof original?.url === 'string' && (
+    !original.url.startsWith('/auth/') || /^\/auth\/sessions(?:\/|\?|$)/.test(original.url)
+  );
+  if (error.response?.status === 401 && retryableUrl && !original._retried) {
     original._retried = true;
     try {
       refreshing = refreshing || api.post('/auth/refresh').finally(() => { refreshing = null; });
@@ -27,7 +30,21 @@ export const errorText = error => {
   return Array.isArray(detail) ? detail.map(x => x.msg).join('; ') : detail || error.message || 'Request failed';
 };
 export async function download(path, filename) {
-  const response = await api.get(path, { responseType: 'blob' });
+  let response;
+  try {
+    response = await api.get(path, { responseType: 'blob' });
+  } catch (error) {
+    // Axios also wraps JSON error responses in a Blob for downloads.
+    const body = error.response?.data;
+    if (body instanceof Blob && typeof body.text === 'function') {
+      try {
+        error.response.data = JSON.parse(await body.text());
+      } catch {
+        // Preserve the original request error when the body is not JSON.
+      }
+    }
+    throw error;
+  }
   const url = URL.createObjectURL(response.data);
   const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);

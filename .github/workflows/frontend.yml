@@ -1,0 +1,56 @@
+name: Frontend
+
+on:
+  push:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned Yarn
+        run: npm install --global yarn@1.22.22
+      - name: Install dependencies
+        run: |
+          if test -f yarn.lock; then
+            yarn install --frozen-lockfile --ignore-scripts --non-interactive --registry https://registry.npmjs.org
+          else
+            yarn install --ignore-scripts --non-interactive --registry https://registry.npmjs.org
+          fi
+      - name: Unit and component tests
+        run: yarn test --watchAll=false --runInBand
+      - name: Production build
+        run: yarn build
+      - name: Preserve resolved dependency lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-yarn-lock
+          path: frontend/yarn.lock
+          if-no-files-found: ignore
+      - name: Preserve production bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/build
+          if-no-files-found: error
