@@ -1,12 +1,12 @@
 # Release readiness
 
-**Decision: not ready for production release.** Audit date: 2026-10-14 UTC. Backend core workflow and Docker startup now have passing CI evidence. Frontend build/browser coverage and enterprise operational controls remain incomplete.
+**Decision: not ready for production release.** Audit date: 2026-10-14 UTC. Backend core workflow and Docker startup now have passing CI evidence. Frontend component/build and backend/container checks pass; browser coverage and enterprise operational controls remain incomplete.
 
 ## Required gates
 
 | Gate | Audit status | Evidence required |
 | --- | --- | --- |
-| Reproducible backend/frontend installs | In progress | Clean environment installs, dependency lock/constraints, successful build |
+| Reproducible backend/frontend installs | CI installs/build pass; frozen-lock rerun pending | Committed backend pins and CI-generated frontend lock; repeat frozen install |
 | Configuration/startup/health/request limits | In progress | Regression tests and live startup/degraded readiness |
 | MongoDB persistence and upgrade behavior | Core integration verified in CI | Restart/upgrade/restore behavior still requires dedicated tests |
 | Authentication/CSRF/cookie/tenant regressions | Pending | Positive and negative API tests, two-tenant access tests and browser cookie validation |

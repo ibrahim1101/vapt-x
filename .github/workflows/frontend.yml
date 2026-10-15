@@ -31,12 +31,7 @@ jobs:
       - name: Install pinned Yarn
         run: npm install --global yarn@1.22.22
       - name: Install dependencies
-        run: |
-          if test -f yarn.lock; then
-            yarn install --frozen-lockfile --ignore-scripts --non-interactive --registry https://registry.npmjs.org
-          else
-            yarn install --ignore-scripts --non-interactive --registry https://registry.npmjs.org
-          fi
+        run: yarn install --frozen-lockfile --ignore-scripts --non-interactive --registry https://registry.npmjs.org
       - name: Unit and component tests
         run: yarn test --watchAll=false --runInBand
       - name: Production build

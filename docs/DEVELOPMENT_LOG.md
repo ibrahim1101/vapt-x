@@ -91,3 +91,9 @@ Added atomic finding triage history: status/notes before and after, actor/email 
 Local backend suite: **70 passed, 1 skipped**, including nine new history tests. The expanded disposable Mongo fixture tests history persistence, idempotency, bounded retention and cross-tenant denial; remote CI remains required for these new assertions.
 
 Published frontend state-isolation/project-filter/API regressions and a Node 22/Yarn frontend workflow. The local install was too slow to complete; CI will resolve dependencies, run Jest/build and preserve a lockfile artifact for committing. No successful frontend build is claimed yet. GitHub publication was briefly blocked by automatic review; reading the user's explicit repository/commit/PR handoff and verifying connected ownership/push permission resolved authorization, and publication succeeded.
+
+## Verified history/frontend batch and dependency lock
+
+Head `fa1c137795a5f79259b3b79ee229676aa54f5fd6` passed [backend 38726564528](https://github.com/ibrahim1101/vapt-x/actions/runs/38726564528): **71 passed** on Python 3.11 and 3.12, zero skips. Real Mongo verifies history attribution, idempotency, bounded retention and isolation. [Frontend 38726564604](https://github.com/ibrahim1101/vapt-x/actions/runs/38726564604) passed **28 tests in seven suites** and a production build with `CI=true`; [Docker 38726564508](https://github.com/ibrahim1101/vapt-x/actions/runs/38726564508) passed again.
+
+Retrieved `yarn.lock` from the prior passing frontend CI artifact 11968217921: 545,807 bytes, SHA-256 `fea7ed9687b191258634a335d39db1e6e4968ca928ec1c329f2ab1879ed114e0`. Committed it and made the frontend workflow require frozen installation. Node 22/Yarn 1.22.22 are the verified frontend toolchain. No dependency versions were hand-invented during lock generation. Browser E2E setup is the next validation workstream.
