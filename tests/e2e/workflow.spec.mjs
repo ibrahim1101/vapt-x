@@ -80,6 +80,7 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   const asset = await saveModal(page, '/assets');
   await expect(page.getByTestId(`assets-row-${asset.id}`)).toBeVisible();
   await page.getByTestId(`edit-asset-${asset.id}`).click();
+  await expect(page.getByTestId('asset-history')).toContainText('assets.created');
   await page.getByTestId('field-owner').fill('Synthetic asset team');
   await page.getByTestId('field-criticality').selectOption('high');
   await page.getByTestId('field-tags').fill('synthetic, training');

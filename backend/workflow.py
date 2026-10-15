@@ -248,6 +248,41 @@ async def create_asset(body: AssetInput, ctx=Depends(get_ctx)):
     return await repo.add("assets", body.model_dump())
 
 
+@router.get("/assets")
+async def list_assets(
+    project_id: str | None = None,
+    search: str = Query(default="", max_length=120),
+    criticality: Literal["critical", "high", "medium", "low"] | None = None,
+    offset: int = Query(default=0, ge=0, le=1_000_000),
+    limit: int = Query(default=25, ge=1, le=100),
+    ctx=Depends(get_ctx),
+):
+    ctx.require("read")
+    repo = Repository(ctx)
+    filters = {}
+    if project_id:
+        await repo.get("projects", project_id)
+        filters["project_id"] = project_id
+    if criticality == "medium":
+        filters["$and"] = [{"$or": [{"criticality": "medium"}, {"criticality": {"$exists": False}}]}]
+    elif criticality:
+        filters["criticality"] = criticality
+    if search.strip():
+        expression = {"$regex": re.escape(search.strip()), "$options": "i"}
+        filters["$or"] = [{field: expression} for field in ("name", "target", "owner", "tags")]
+    return await repo.page("assets", filters, offset=offset, limit=limit)
+
+
+@router.get("/assets/{asset_id}/history")
+async def asset_history(asset_id: str, ctx=Depends(get_ctx)):
+    ctx.require("read")
+    repo = Repository(ctx)
+    await repo.get("assets", asset_id)
+    events = await repo.list("audit_events", {"resource_type": "assets", "resource_id": asset_id}, limit=101)
+    return {"events": events[:100], "has_more": len(events) > 100,
+            "notice": "Latest 100 asset activity events. Audit records list changed fields, not previous values."}
+
+
 @router.patch("/assets/{asset_id}")
 async def update_asset(asset_id: str, body: AssetUpdate, ctx=Depends(get_ctx)):
     ctx.require("write")

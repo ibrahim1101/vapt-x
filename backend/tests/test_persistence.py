@@ -74,6 +74,10 @@ class PersistenceTests(unittest.TestCase):
                     saved = mongo[database].assets.find_one({'_id': asset['id']})
                     assert saved['target'] == 'training://local' and saved['scope_id'] == scope['id']
                     assert saved['tags'] == ['production', 'api'] and saved['criticality'] == 'high'
+                    history = client.get('/api/assets/' + asset['id'] + '/history').json()
+                    assert any(event['action'] == 'assets.updated' for event in history['events'])
+                    assert client.get('/api/assets', params={'search': 'production', 'criticality': 'high'}).json()['total'] == 1
+
                     assessment = post('assessments', {'project_id': project['id'], 'name': 'Fixture assessment', 'asset_ids': [asset['id']]})
                     fixture = json.dumps({'results': [{'check_id': 'fixture-rule', 'path': 'fixture.py',
                         'extra': {'message': 'Synthetic observation', 'severity': 'WARNING'}}]})
@@ -188,6 +192,13 @@ class PersistenceTests(unittest.TestCase):
                     assert page['total'] == 1005 and len(page['items']) == 5 and not page['has_more']
                     assert all(row['org_id'] == org['id'] for row in page['items'])
                     assert client.get('/api/findings', params={'limit': 101}).status_code == 422
+                    mongo[database].assets.insert_many([{'_id': 'asset-page-' + str(i),
+                        'org_id': org['id'], 'created_by': user['id'], 'created_at': now.isoformat(),
+                        'project_id': project['id'], 'name': 'Inventory page fixture',
+                        'target': 'training://local'} for i in range(1005)])
+                    page = client.get('/api/assets', params={'project_id': project['id'],
+                        'search': 'Inventory page fixture', 'criticality': 'medium', 'offset':1000}).json()
+                    assert page['total'] == 1005 and len(page['items']) == 5 and not page['has_more']
                     # A second organization cannot retrieve or mutate any first-organization resource.
                     response = client.post('/api/auth/register', headers=origin, json={'email': 'bob@example.com', 'password': 'integration-password'})
                     assert response.status_code == 200, response.text
@@ -206,6 +217,9 @@ class PersistenceTests(unittest.TestCase):
                     assert response.status_code == 404
                     assert client.get('/api/findings', params={'project_id': project['id']}).status_code == 404
                     assert client.get('/api/findings').json()['total'] == 0
+                    assert client.get('/api/assets/' + asset['id'] + '/history').status_code == 404
+                    assert client.get('/api/assets', params={'project_id': project['id']}).status_code == 404
+                    assert client.get('/api/assets').json()['total'] == 0
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])
                     assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True
