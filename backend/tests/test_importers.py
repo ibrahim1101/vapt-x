@@ -100,7 +100,7 @@ class ImporterTests(unittest.TestCase):
     def test_imported_metadata_cannot_assert_verification(self):
         for scanner, data in [('nuclei', {**NUCLEI, 'verification': 'confirmed', 'status': 'confirmed', 'severity': 'critical'}), ('semgrep', SEMGREP), ('trivy', TRIVY), ('zap', ZAP)]:
             row = parse_report(scanner, json.dumps(data))[0]
-            self.assertEqual(set(row), {'title', 'severity', 'rule_id', 'target', 'description', 'remediation'})
+            self.assertEqual(set(row), {'title', 'severity', 'rule_id', 'target', 'description', 'remediation', 'cve_ids', 'cwe_ids'})
         self.assertEqual(parse_report('nuclei', json.dumps({**NUCLEI, 'severity': 'critical'}))[0]['severity'], 'medium')
 
     def test_findings_limit_rejects_instead_of_truncating(self):

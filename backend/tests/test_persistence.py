@@ -206,6 +206,15 @@ class PersistenceTests(unittest.TestCase):
                     saved_finding = mongo[database].findings.find_one({'_id':finding['id']})
                     assert saved_finding['owner'] == 'Synthetic finding team'
                     assert saved_finding['verification'] == 'imported-unverified'
+                    # Intelligence cache remains separate from scanner observations, with no network in CI.
+                    mongo[database].findings.update_one({'_id':finding['id']},{'$set':{'cve_ids':['CVE-2026-12345']}})
+                    mongo[database].vulnerability_intelligence.insert_one({'_id':'epss:CVE-2026-12345',
+                        'status':'available','source':'epss','source_url':'https://api.first.org/data/v1/epss',
+                        'fetched_at':now.isoformat(),'facts':{'probability':0.25,'percentile':0.98,'date':'2026-10-15'}})
+                    intel = client.get('/api/findings/' + finding['id'] + '/intelligence/CVE-2026-12345').json()
+                    assert intel['sources']['epss']['facts']['probability'] == 0.25
+                    assert intel['derived_priority']['level'] == 'high'
+                    assert mongo[database].findings.find_one({'_id':finding['id']})['verification'] == 'imported-unverified'
                     # Navigation must reach findings beyond the workspace's 1,000-row limit.
                     mongo[database].findings.insert_many([{
                         '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],
@@ -255,6 +264,7 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/assessments').json()['total'] == 0
                     assert client.get('/api/project-templates').json() == []
                     assert client.post('/api/projects', headers=headers(), json={'name':'Foreign template attempt','template_id':template['id']}).status_code == 404
+                    assert client.get('/api/findings/' + finding['id'] + '/intelligence/CVE-2026-12345').status_code == 404
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])
                     assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True

@@ -11,7 +11,7 @@ MAX_FINDINGS = 2000
 def finding(title, severity, rule, target, detail, remediation="Review the scanner evidence and apply the vendor-recommended mitigation."):
     sev = str(severity).lower()
     sev = {"warning": "medium", "error": "high", "informational": "info", "unknown": "info"}.get(sev, sev)
-    return {"title": str(title)[:300], "severity": sev if sev in SEVERITIES else "info", "rule_id": str(rule), "target": str(target), "description": str(detail)[:20000], "remediation": str(remediation)[:10000]}
+    return {"cve_ids": sorted(set(re.findall(r"\bCVE-\d{4}-\d{4,19}\b", f"{title} {rule} {detail}".upper())))[:20], "cwe_ids": sorted(set(re.findall(r"\bCWE-\d{1,6}\b", f"{title} {rule} {detail}".upper())))[:30], "title": str(title)[:300], "severity": sev if sev in SEVERITIES else "info", "rule_id": str(rule), "target": str(target), "description": str(detail)[:20000], "remediation": str(remediation)[:10000]}
 
 
 def _object(value, label):

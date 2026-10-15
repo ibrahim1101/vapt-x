@@ -12,6 +12,7 @@ from workflow import router as workflow_router
 from evidence import router as evidence_router
 from reporting import router as reporting_router
 from analyst import router as analyst_router
+from intelligence import router as intelligence_router
 
 
 @asynccontextmanager
@@ -84,3 +85,4 @@ async def training_security_policy():
 
 for router in (auth_router, workflow_router, evidence_router, reporting_router, analyst_router):
     app.include_router(router)
+app.include_router(intelligence_router)

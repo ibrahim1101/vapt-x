@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 // Deliberately synthetic report data; no external targets or scanners are invoked.
-const fixtureTitle = 'Synthetic CI finding — do not treat as a security observation';
+const fixtureTitle = 'Synthetic CI finding CVE-2026-12345 — do not treat as a security observation';
 const semgrepFixture = {
   results: [{ check_id: 'ci.synthetic.rule', path: 'synthetic-fixture.py', start: { line: 1 },
     extra: { message: fixtureTitle, severity: 'WARNING', lines: '# synthetic CI fixture',
@@ -117,6 +117,8 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await expect(findingRow).toHaveCount(1);
   await findingRow.click();
   await expect(page.getByTestId('workspace-modal')).toContainText('imported-unverified');
+  await expect(page.getByTestId('finding-intelligence')).toContainText('Scanner-declared CVE');
+  await expect(page.getByTestId('field-intelligence-cve')).toHaveValue('CVE-2026-12345');
   await page.getByTestId('field-status').selectOption('confirmed');
   await page.getByTestId('field-notes').fill('Synthetic CI triage only; no real vulnerability asserted.');
   const findingId = (await findingRow.getAttribute('data-testid')).replace('findings-row-', '');
