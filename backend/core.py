@@ -73,7 +73,8 @@ def clean(doc):
     if doc is None:
         return None
     result = BaseDocument.from_mongo(doc).model_dump()
-    result.pop("password_hash", None)
+    for field in ("password_hash", "mfa_secret", "mfa_pending", "mfa_recovery_hashes"):
+        result.pop(field, None)
     return result
 
 

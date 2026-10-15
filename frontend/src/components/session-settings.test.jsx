@@ -50,6 +50,6 @@ test('password change submits only credentials and clears the form', async () =>
     container.querySelector(`[name="${name}"]`).value = value;
   }
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', {bubbles:true,cancelable:true})));
-  expect(api.post).toHaveBeenCalledWith('/auth/password', {current_password:'old-password',new_password:'new-password'});
+  expect(api.post).toHaveBeenCalledWith('/auth/password', {current_password:'old-password',new_password:'new-password',mfa_code:''});
   expect(container.querySelector('[name="new_password"]').value).toBe('');
 });

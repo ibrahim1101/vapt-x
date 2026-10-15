@@ -57,6 +57,7 @@ jobs:
           VAPTX_LOCAL_HTTP=1
           MONGO_TIMEOUT_MS=5000
           ENV
+          node -e "process.stdout.write('MFA_ENCRYPTION_KEYS=' + require('crypto').randomBytes(32).toString('base64url') + '=\n')" >> "$RUNNER_TEMP/vaptx-browser.env"
           cp "$RUNNER_TEMP/vaptx-browser.env" backend/.env
       - name: Validate Compose and build API image
         run: |

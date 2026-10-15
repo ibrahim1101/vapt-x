@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { createHmac } from 'node:crypto';
 
 // Deliberately synthetic report data; no external targets or scanners are invoked.
 const fixtureTitle = 'Synthetic CI finding CVE-2026-12345 — do not treat as a security observation';
@@ -22,12 +23,24 @@ async function saveModal(page, endpoint, method = 'POST') {
   await expect(page.getByTestId('workspace-modal')).toBeHidden();
   return result;
 }
-async function login(page, email, password) {
+async function login(page, email, password, mfaCode = '') {
   await page.goto('/');
   await page.getByTestId('field-email').fill(email);
   await page.getByTestId('field-password').fill(password);
+  await page.getByTestId('field-mfa_code').fill(mfaCode);
   await submit(page, '/auth/login');
   await expect(page.getByTestId('organization-select')).toBeVisible();
+}
+
+// Independent authenticator fixture: decode Base32 and apply RFC 4226 truncation.
+function authenticatorCode(secret) {
+  const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits='';
+  for(const character of secret.replace(/=+$/,'')) bits+=alphabet.indexOf(character).toString(2).padStart(5,'0');
+  const bytes=[];for(let offset=0;offset+8<=bits.length;offset+=8)bytes.push(parseInt(bits.slice(offset,offset+8),2));
+  const counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
+  const digest=createHmac('sha1',Buffer.from(bytes)).update(counter).digest();
+  return String((digest.readUInt32BE(digest[19]&15)&0x7fffffff)%1000000).padStart(6,'0');
 }
 
 test('controlled assessment, evidence, reporting and session lifecycle', async ({ page, browser }, testInfo) => {
@@ -371,5 +384,33 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await page.getByTestId('logout').click();
   await login(page,email,changedPassword);
   await expect(page.getByTestId('analytics-coverage')).toContainText('all stored records');
+  await page.getByTestId('nav-organization').click();
+  await page.getByTestId('mfa-enroll').click();
+  let mfaModal=page.getByTestId('workspace-modal');
+  await mfaModal.getByTestId('field-current_password').fill(changedPassword);
+  await submit(page,'/auth/mfa/setup');
+  const manualKey=await mfaModal.getByTestId('field-mfa-setup-key').inputValue();
+  await mfaModal.getByTestId('field-code').fill(authenticatorCode(manualKey));
+  const enrollment=await submit(page,'/auth/mfa/confirm');
+  await expect(page.getByTestId('mfa-recovery-codes')).toContainText(enrollment.recovery_codes[0]);
+  await page.getByTestId('mfa-done').click();
+  await expect(page.getByTestId('mfa-status')).toContainText('Enabled');
+  await page.getByTestId('logout').click();
+  await login(page,email,changedPassword,enrollment.recovery_codes[0]);
+  await page.getByTestId('nav-organization').click();
+  await expect(page.getByTestId('mfa-status')).toContainText('9 recovery codes');
+  await page.getByTestId('mfa-regenerate').click();
+  mfaModal=page.getByTestId('workspace-modal');
+  await mfaModal.getByTestId('field-current_password').fill(changedPassword);
+  await mfaModal.getByTestId('field-mfa_code').fill(enrollment.recovery_codes[1]);
+  const replacement=await submit(page,'/auth/mfa/recovery-codes');
+  await page.getByTestId('mfa-done').click();
+  await page.getByTestId('mfa-disable').click();
+  mfaModal=page.getByTestId('workspace-modal');
+  await mfaModal.getByTestId('field-current_password').fill(changedPassword);
+  await mfaModal.getByTestId('field-mfa_code').fill(replacement.recovery_codes[0]);
+  await submit(page,'/auth/mfa/disable');
+  await page.getByTestId('mfa-done').click();
+  await expect(page.getByTestId('mfa-status')).toContainText('Not enabled');
   expect(pageErrors).toEqual([]);
 });

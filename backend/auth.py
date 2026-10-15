@@ -15,6 +15,7 @@ class Credentials(BaseModel):
     email: EmailStr
     password: str = Field(min_length=10, max_length=72)
     name: str = Field(default="", max_length=100)
+    mfa_code: str = Field(default="", max_length=64)
 
     @field_validator("password")
     @classmethod
@@ -25,6 +26,7 @@ class Credentials(BaseModel):
 
 
 class PasswordChange(BaseModel):
+    mfa_code: str = Field(default="", max_length=64)
     current_password: str = Field(min_length=10, max_length=72)
     new_password: str = Field(min_length=10, max_length=72)
 
@@ -57,6 +59,7 @@ async def seed_admin():
     await db.users.create_index("email", unique=True)
     await db.memberships.create_index([("org_id", 1), ("user_id", 1)], unique=True)
     await db.auth_attempts.create_index("expires_at", expireAfterSeconds=0)
+    await db.mfa_attempts.create_index("expires_at", expireAfterSeconds=0)
     email = os.environ["ADMIN_EMAIL"].lower().strip()
     if not await db.users.find_one({"email": email}):
         await insert_identity("users", {"email": email, "name": "Workspace owner", "password_hash": hash_password(os.environ["ADMIN_PASSWORD"]), "platform_role": "platform_admin", "created_at": iso()})
@@ -104,6 +107,14 @@ async def login(body: Credentials, response: Response):
     if not doc or not verify_password(body.password, doc["password_hash"]):
         await insert_identity("auth_attempts", {"email": email, "expires_at": now() + timedelta(minutes=15)})
         raise HTTPException(401, "Invalid email or password")
+    if doc.get("mfa_enabled"):
+        from mfa import consume
+        verified = await consume(doc, body.mfa_code)
+        if not verified:
+            await insert_identity("auth_attempts", {"email": email, "expires_at": now() + timedelta(minutes=15)})
+            raise HTTPException(401, "A valid, unused authenticator or recovery code is required")
+        doc = verified
+        await db.mfa_attempts.delete_one({"_id":str(doc["_id"])})
     await db.auth_attempts.delete_many({"email": email})
     return await establish_session(clean(doc), response)
 
@@ -166,21 +177,31 @@ async def change_password(body: PasswordChange, response: Response, user=Depends
         raise HTTPException(403, "Current password is incorrect")
     if verify_password(body.new_password, credential["password_hash"]):
         raise HTTPException(422, "Choose a different password")
+    from mfa import consume, version_query
+    if credential.get("mfa_enabled"):
+        credential = await consume(credential, body.mfa_code)
+        if not credential: raise HTTPException(403, "A valid, unused authenticator or recovery code is required")
     # Compare-and-swap prevents concurrent changes from overwriting one another.
     # Credential versions also invalidate sessions/tokens minted by in-flight old requests.
     changed = await db.users.find_one_and_update(
-        {"_id": user["id"], "password_hash": credential["password_hash"]},
+        {"_id": user["id"], "password_hash": credential["password_hash"], **version_query(credential)},
         {"$set": {"password_hash": hash_password(body.new_password), "password_changed_at": iso()},
          "$inc": {"credential_version": 1}}, return_document=ReturnDocument.AFTER)
     if not changed:
         raise HTTPException(409, "Credentials changed. Sign in again.")
-    version = changed["credential_version"]
-    old_versions = {"$or": [{"credential_version": {"$exists": False}}, {"credential_version": {"$lt": version}}]}
-    await db.sessions.update_many({"user_id": user["id"], "revoked": False, **old_versions}, {"$set": {"revoked": True}})
-    await db.api_tokens.update_many({"created_by": user["id"], "revoked": False, **old_versions}, {"$set": {"revoked": True, "revoked_at": iso()}})
     await db.auth_attempts.delete_many({"email": key})
-    await establish_session(clean(changed), response)
+    await renew_credentials(changed, response)
     return {"ok": True, "notice": "Password changed. Previous sessions and API tokens are invalidated."}
+
+
+async def renew_credentials(document, response):
+    """Epoch invalidation is authoritative even if old requests insert after cleanup."""
+    version = document["credential_version"]
+    uid = str(document["_id"])
+    old_versions = {"$or": [{"credential_version": {"$exists": False}}, {"credential_version": {"$lt": version}}]}
+    await db.sessions.update_many({"user_id": uid, "revoked": False, **old_versions}, {"$set": {"revoked": True}})
+    await db.api_tokens.update_many({"created_by": uid, "revoked": False, **old_versions}, {"$set": {"revoked": True, "revoked_at": iso()}})
+    await establish_session(clean(document), response)
 
 
 @router.get("/auth/sessions")

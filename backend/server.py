@@ -126,3 +126,6 @@ app.include_router(tokens_router)
 app.include_router(webhooks_router)
 
 app.include_router(analytics_router)
+
+from mfa import router as mfa_router
+app.include_router(mfa_router)

@@ -18,7 +18,7 @@ class PasswordTests(unittest.IsolatedAsyncioTestCase):
             result=await auth.change_password(auth.PasswordChange(current_password='old-password',new_password='new-password'),Response(),user)
             self.assertEqual(result['ok'],True);self.assertNotIn('hash',str(result))
             query,update=db.users.find_one_and_update.call_args.args
-            self.assertEqual(query,{'_id':'alice','password_hash':'old-hash'})
+            self.assertEqual(query,{'_id':'alice','password_hash':'old-hash','credential_version':2})
             self.assertEqual(update['$inc'],{'credential_version':1})
             self.assertEqual(establish.call_args.args[0]['credential_version'],3)
             self.assertEqual(db.api_tokens.update_many.call_args.args[0]['created_by'],'alice')

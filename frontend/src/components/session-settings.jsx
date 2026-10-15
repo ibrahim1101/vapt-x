@@ -44,7 +44,7 @@ export function SessionSettings() {
     if (values.new_password !== values.confirm_password) { toast.error('New passwords must match.'); return; }
     setBusy(true);
     try {
-      await api.post('/auth/password', { current_password: values.current_password, new_password: values.new_password });
+      await api.post('/auth/password', { current_password: values.current_password, new_password: values.new_password, mfa_code: values.mfa_code||'' });
       form.reset();
       await load();
       toast.success('Password changed. Previous sessions and API tokens are invalidated.');
@@ -56,6 +56,7 @@ export function SessionSettings() {
       <Field label="Current password" name="current_password" type="password" autoComplete="current-password" required minLength={10} maxLength={72}/>
       <Field label="New password" name="new_password" type="password" autoComplete="new-password" required minLength={10} maxLength={72}/>
       <Field label="Confirm new password" name="confirm_password" type="password" autoComplete="new-password" required minLength={10} maxLength={72}/>
+      <Field label="Authenticator or recovery code (if MFA enabled)" name="mfa_code" autoComplete="one-time-code" maxLength={64}/>
       <button className="btn btn-primary" type="submit" data-testid="change-password" disabled={busy}>Change password</button>
     </form>
   </Panel><Panel title="Your active sessions" subtitle="Sessions belong to your account across organizations. Revocation takes effect on the next authenticated request." className="section-gap">
