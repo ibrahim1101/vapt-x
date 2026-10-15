@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import secrets
 from contextlib import asynccontextmanager
@@ -16,10 +17,12 @@ from intelligence import router as intelligence_router
 from inventory_imports import router as inventory_router
 from governance import router as governance_router
 from api_tokens import router as tokens_router
+from webhooks import router as webhooks_router,configured as webhooks_configured,delivery_loop
 
 
 @asynccontextmanager
 async def lifespan(app):
+    webhook_worker=None
     try:
         await db.command('ping')
         await seed_admin()
@@ -27,6 +30,8 @@ async def lifespan(app):
         for collection in ('project_templates', 'projects', 'scopes', 'assets', 'assessments', 'jobs', 'findings', 'tasks', 'evidence', 'evidence_chunks', 'reports', 'report_files', 'audit_events', 'ai_sessions'):
             await db[collection].create_index([('org_id', 1), ('created_at', -1)])
         await db.findings.create_index([('org_id', 1), ('project_id', 1), ('created_at', -1), ('_id', -1)])
+        await db.webhook_deliveries.create_index([('status',1),('next_attempt_at',1),('lease_expires_at',1),('created_at',1)])
+        await db.webhook_deliveries.create_index([('org_id',1),('webhook_id',1),('created_at',-1)])
         await db.api_tokens.create_index('token_hash',unique=True)
         await db.api_tokens.create_index([('org_id',1),('created_by',1),('revoked',1),('expires_at',1)])
         await db.sla_policies.create_index('org_id',unique=True)
@@ -34,9 +39,13 @@ async def lifespan(app):
         await db.inventory_items.create_index([('org_id',1),('asset_id',1),('fingerprint',1)],unique=True)
         await db.evidence_chunks.create_index([('org_id', 1), ('evidence_id', 1), ('index', 1)], unique=True)
         await db.jobs.update_many({'status': {'$in': ['queued', 'running', 'cancelling']}}, {'$set': {'status': 'interrupted', 'error': 'Worker restarted before completion; run again.', 'finished_at': iso()}})
+        if webhooks_configured():webhook_worker=asyncio.create_task(delivery_loop())
         logging.getLogger(__name__).info('VAPT-X database initialization completed')
         yield
     finally:
+        if webhook_worker:
+            webhook_worker.cancel()
+            await asyncio.gather(webhook_worker,return_exceptions=True)
         client.close()
 
 
@@ -112,3 +121,5 @@ app.include_router(inventory_router)
 app.include_router(governance_router)
 
 app.include_router(tokens_router)
+
+app.include_router(webhooks_router)

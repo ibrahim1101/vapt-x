@@ -27,3 +27,8 @@ starlette==1.8.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 uvicorn==0.34.2
+
+# Authenticated encryption for optional integration destinations and signing keys.
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.11

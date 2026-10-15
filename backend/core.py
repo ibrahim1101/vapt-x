@@ -190,11 +190,19 @@ async def audit(ctx_or_none, action: str, resource_type: str = "", resource_id: 
         org_id=org_id or ctx_or_none.org_id,
         created_by=ctx_or_none.uid if ctx_or_none else "system",
         actor_id=ctx_or_none.uid if ctx_or_none else None,
-        actor_email=actor_email or (ctx_or_none.user["email"] if ctx_or_none else None),
+        api_token_id=ctx_or_none.user.get("_api_token_id") if ctx_or_none else None,
+        actor_email=actor_email or (ctx_or_none.user.get("email") if ctx_or_none else None),
         action=action, resource_type=resource_type, resource_id=resource_id,
         details=details or {}, outcome=outcome,
     )
     await db.audit_events.insert_one(doc.to_mongo())
+    if action in {"finding.triaged","scan.completed","reports.created","assessment.cancelled"}:
+        try:
+            from webhooks import dispatch_event
+            await dispatch_event(doc.org_id,action,doc.model_dump())
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning("Webhook enqueue failed; primary action audit was preserved")
 
 
 async def notify(org_id: str, kind: str, title: str, body: str = "", link: str = "", user_ids: list | None = None, severity: str = "info"):

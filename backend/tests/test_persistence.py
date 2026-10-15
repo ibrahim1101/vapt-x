@@ -284,6 +284,27 @@ class PersistenceTests(unittest.TestCase):
                     assert writer['token'] not in json.dumps(listed) and 'token_hash' not in json.dumps(listed)
                     mongo[database].api_tokens.update_one({'_id':writer['id']},{'$set':{'expires_at':'2020-01-01T00:00:00+00:00'}})
                     assert client.get('/api/workspace',headers=writer_headers).status_code == 401
+                    # Configure a synthetic webhook under mocks. No external destination is contacted.
+                    from cryptography.fernet import Fernet
+                    import webhooks
+                    with patch.dict(os.environ,{'WEBHOOK_ENCRYPTION_KEYS':Fernet.generate_key().decode()}), patch('webhooks.destination',new_callable=AsyncMock,return_value=(__import__('urllib.parse',fromlist=['urlsplit']).urlsplit('https://example.com/synthetic-hook'),'93.184.216.34')):
+                        hook=post('webhooks',{'name':'Synthetic destination','url':'https://example.com/synthetic-hook','events':['finding.triaged'],'enabled':False})
+                        stored=mongo[database].webhooks.find_one({'_id':hook['id']})
+                        assert hook['signing_secret'] not in json.dumps(stored)
+                        assert 'synthetic-hook' not in json.dumps(stored)
+                        assert client.post('/api/webhooks/'+hook['id']+'/test',headers=headers()).status_code == 409
+                        response=client.patch('/api/webhooks/'+hook['id'],headers=headers(),json={'enabled':True})
+                        assert response.status_code == 200
+                        receipt=post('webhooks/'+hook['id']+'/test',{})
+                        assert receipt['status'] == 'queued'
+                        with patch('webhooks.send',new_callable=AsyncMock,return_value=204):
+                            assert client.portal.call(webhooks.deliver_one) is True
+                        delivery=mongo[database].webhook_deliveries.find_one({'_id':receipt['id']})
+                        assert delivery['status'] == 'delivered'
+                        assert client.get('/api/webhooks/'+hook['id']+'/deliveries').json()['total'] == 1
+                        listed=client.get('/api/webhooks').json()
+                        assert hook['signing_secret'] not in json.dumps(listed)
+                        assert 'encrypted_configuration' not in json.dumps(listed)
                     # Navigation must reach findings beyond the workspace's 1,000-row limit.
                     mongo[database].findings.insert_many([{
                         '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],
@@ -338,6 +359,7 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/findings/' + finding['id'] + '/comments').status_code == 404
                     assert client.get('/api/sla-policy').json()['days']['high'] == 7
                     assert client.get('/api/reports/' + report['id'] + '/snapshot').status_code == 404
+                    assert client.get('/api/webhooks/'+hook['id']+'/deliveries').status_code == 404
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])
                     assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True
