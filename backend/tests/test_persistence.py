@@ -263,6 +263,27 @@ class PersistenceTests(unittest.TestCase):
                         followup=post('ai/messages',{'project_id':project['id'],'session_id':chat['id'],'provider':'openai','model':'synthetic-model','message':'Summarize coverage limitations'})
                         assert followup['message_count'] == 4 and len(followup['messages']) == 4
                         assert mongo[database].ai_usage.count_documents({'org_id':org['id']}) == 2
+                    credential=post('api-tokens',{'name':'Synthetic read token','scopes':['read'],'expires_days':1})
+                    bearer={'authorization':'Bearer '+credential['token']}
+                    stored=mongo[database].api_tokens.find_one({'_id':credential['id']})
+                    assert stored['token_hash'] != credential['token'] and 'token' not in stored
+                    assert client.get('/api/workspace',headers=bearer).status_code == 200
+                    assert client.get('/api/workspace',headers={**bearer,'x-org-id':'foreign'}).status_code == 404
+                    assert client.post('/api/projects',headers=bearer,json={'name':'Forbidden token write'}).status_code == 403
+                    assert client.post('/api/auth/sessions/revoke-others',headers=bearer).status_code == 403
+                    assert client.post('/api/api-tokens',headers=bearer,json={'name':'Escalation','scopes':['write']}).status_code == 403
+                    writer=post('api-tokens',{'name':'Synthetic write token','scopes':['read','write'],'expires_days':1})
+                    writer_headers={'authorization':'Bearer '+writer['token']}
+                    assert client.post('/api/projects',headers=writer_headers,json={'name':'API synthetic project'}).status_code == 200
+                    mongo[database].memberships.update_one({'org_id':org['id'],'user_id':user['id']},{'$set':{'role':'viewer'}})
+                    assert client.post('/api/projects',headers=writer_headers,json={'name':'Role demotion denial'}).status_code == 403
+                    mongo[database].memberships.update_one({'org_id':org['id'],'user_id':user['id']},{'$set':{'role':'org_admin'}})
+                    post('api-tokens/'+credential['id']+'/revoke',{})
+                    assert client.get('/api/workspace',headers=bearer).status_code == 401
+                    listed=client.get('/api/api-tokens').json()
+                    assert writer['token'] not in json.dumps(listed) and 'token_hash' not in json.dumps(listed)
+                    mongo[database].api_tokens.update_one({'_id':writer['id']},{'$set':{'expires_at':'2020-01-01T00:00:00+00:00'}})
+                    assert client.get('/api/workspace',headers=writer_headers).status_code == 401
                     # Navigation must reach findings beyond the workspace's 1,000-row limit.
                     mongo[database].findings.insert_many([{
                         '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],

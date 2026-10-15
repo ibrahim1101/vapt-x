@@ -43,6 +43,7 @@ def redact(value):
     value=re.sub(r'-----BEGIN [^-\n]+-----.*?-----END [^-\n]+-----','[REDACTED PRIVATE MATERIAL]',value,flags=re.S)
     value=re.sub(r'(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*','Bearer [REDACTED]',value)
     value=re.sub(r'(?i)\b(api[_-]?key|password|passwd|secret|token|authorization)\b(\s*[:=]\s*)[\'\"]?[^\s\'\"<>,;]{4,}',r'\1\2[REDACTED]',value)
+    value=re.sub(r'\bvaptx_[A-Za-z0-9_-]{40,}\b','[REDACTED API TOKEN]',value)
     value=re.sub(r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b','[REDACTED JWT]',value)
     return value
 

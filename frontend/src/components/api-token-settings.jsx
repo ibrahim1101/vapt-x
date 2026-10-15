@@ -1,0 +1,16 @@
+import { useEffect,useState } from 'react';
+import { api,errorText } from '../lib/api';
+import { Action,DataTable,Field,Modal,Panel,Submit } from './workspace-ui';
+export function APITokenSettings() {
+  const [rows,setRows]=useState([]),[show,setShow]=useState(false),[created,setCreated]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+  async function load(){try{setRows((await api.get('/api-tokens')).data.tokens);setError('');}catch(e){setError(errorText(e));}}
+  useEffect(()=>{let active=true;api.get('/api-tokens').then(({data})=>{if(active)setRows(data.tokens);}).catch(e=>{if(active)setError(errorText(e));});return()=>{active=false;};},[]);
+  function close(){setShow(false);setCreated(null);}
+  async function create(e){e.preventDefault();setBusy(true);setError('');const form=new FormData(e.target);try{setCreated((await api.post('/api-tokens',{name:form.get('name'),expires_days:Number(form.get('expires_days')),scopes:form.getAll('scopes')})).data);await load();}catch(e){setError(errorText(e));}finally{setBusy(false);}}
+  async function revoke(id){setBusy(true);try{await api.post(`/api-tokens/${id}/revoke`);await load();}catch(e){setError(errorText(e));}finally{setBusy(false);}}
+  return <Panel title="Personal API tokens" subtitle="Fixed organization · current role permissions · secrets shown once" className="section-gap" action={<Action secondary testId="new-api-token" onClick={()=>{setError('');setShow(true);}}>Create token</Action>}>
+    {error&&<p role="alert">{error}</p>}<DataTable name="api-tokens" rows={rows} columns={[{key:'name',label:'Name'},{key:'token_prefix',label:'Prefix'},{key:'scopes',label:'Permissions',render:t=>t.scopes.join(', ')},{key:'expires_at',label:'Expires',render:t=>new Date(t.expires_at).toLocaleString()},{key:'id',label:'Revoke',render:t=><Action secondary testId={`revoke-api-token-${t.id}`} disabled={busy} onClick={()=>revoke(t.id)}>Revoke</Action>}]}/>
+    <p className="muted tiny">Use Authorization: Bearer &lt;token&gt;. Tokens cannot manage accounts, sessions, memberships or other tokens. Permission changes and membership removal take effect on subsequent requests.</p>
+    {show&&<Modal open onClose={close} title={created?'Save your API token':'Create personal API token'} description="This token can access only this organization and the permissions you select.">{created?<><p className="form-notice">{created.notice}</p><pre data-testid="created-api-token">{created.token}</pre><Action testId="close-created-api-token" onClick={close}>I saved the token</Action></>:<form onSubmit={create}><Field label="Token name" name="name" minLength={2} maxLength={100} required/><Field label="Expires in days" name="expires_days" type="number" min={1} max={90} defaultValue={30} required/><fieldset><legend>Permissions (cannot exceed your current role)</legend>{['read','write','scan','triage','remediate','report','evidence','ai'].map(scope=><label key={scope}><input data-testid={`token-scope-${scope}`} type="checkbox" name="scopes" value={scope} defaultChecked={scope==='read'}/> {scope}</label>)}</fieldset>{error&&<p role="alert">{error}</p>}<Submit busy={busy}>Create token</Submit></form>}</Modal>}
+  </Panel>;
+}

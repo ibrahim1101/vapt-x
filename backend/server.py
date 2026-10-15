@@ -1,10 +1,10 @@
 import logging
 import secrets
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
-from core import db, client, iso, settings
+from core import db, client, iso, settings, get_current_user
 from pymongo.errors import PyMongoError
 from request_limits import RequestBodyLimitMiddleware
 from auth import router as auth_router, seed_admin
@@ -15,6 +15,7 @@ from analyst import router as analyst_router
 from intelligence import router as intelligence_router
 from inventory_imports import router as inventory_router
 from governance import router as governance_router
+from api_tokens import router as tokens_router
 
 
 @asynccontextmanager
@@ -26,6 +27,8 @@ async def lifespan(app):
         for collection in ('project_templates', 'projects', 'scopes', 'assets', 'assessments', 'jobs', 'findings', 'tasks', 'evidence', 'evidence_chunks', 'reports', 'report_files', 'audit_events', 'ai_sessions'):
             await db[collection].create_index([('org_id', 1), ('created_at', -1)])
         await db.findings.create_index([('org_id', 1), ('project_id', 1), ('created_at', -1), ('_id', -1)])
+        await db.api_tokens.create_index('token_hash',unique=True)
+        await db.api_tokens.create_index([('org_id',1),('created_by',1),('revoked',1),('expires_at',1)])
         await db.sla_policies.create_index('org_id',unique=True)
         await db.finding_comments.create_index([('org_id',1),('finding_id',1),('created_at',-1),('_id',-1)])
         await db.inventory_items.create_index([('org_id',1),('asset_id',1),('fingerprint',1)],unique=True)
@@ -44,7 +47,19 @@ app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=[origin
 
 @app.middleware('http')
 async def request_security(request: Request, call_next):
-    if request.method in {'POST', 'PATCH', 'PUT', 'DELETE'}:
+    bearer=bool(request.headers.get('authorization'))
+    if bearer:
+        try:
+            await get_current_user(request)
+        except HTTPException as exc:
+            return JSONResponse({'detail':exc.detail},status_code=exc.status_code)
+        # API tokens never enter account/session/organization administration or
+        # mint credentials. New domain families must be explicitly enabled here.
+        family=request.url.path.removeprefix('/api/').split('/')[0]
+        if not request.url.path.startswith('/api/') or family not in {'workspace','capabilities','projects','project-templates','assets','assessments','scopes','scans','imports','inventory-imports','jobs','findings','tasks','evidence','reports','sla-policy','ai'}:
+            return JSONResponse({'detail':'API token is not permitted on this endpoint'},status_code=403)
+    if not bearer and request.method in {'POST', 'PATCH', 'PUT', 'DELETE'}:
+
         if request.headers.get('origin') != origin:
             return JSONResponse({'detail': 'Untrusted request origin'}, status_code=403)
         if request.url.path not in {'/api/auth/login', '/api/auth/register'}:
@@ -95,3 +110,5 @@ app.include_router(intelligence_router)
 app.include_router(inventory_router)
 
 app.include_router(governance_router)
+
+app.include_router(tokens_router)

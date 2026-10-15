@@ -109,6 +109,21 @@ def decode_token(token: str) -> dict:
 
 
 async def get_current_user(request: Request) -> dict:
+    cached=getattr(request.state,"api_user",None)
+    if cached is not None:return cached
+    authorization=request.headers.get("authorization", "")
+    if authorization:
+        scheme, _, raw=authorization.partition(" ")
+        if scheme.lower()!="bearer" or not raw.startswith("vaptx_") or not 40<=len(raw)<=100:
+            raise HTTPException(401,"Invalid API token")
+        token=await db.api_tokens.find_one({"token_hash":sha256_hex(raw.encode()),"revoked":False,"expires_at":{"$gt":iso()}})
+        if not token:raise HTTPException(401,"Invalid or expired API token")
+        user=await db.users.find_one({"_id":token["created_by"]})
+        if not user:raise HTTPException(401,"Token owner is unavailable")
+        user=clean(user)
+        user.update(_token_scopes=token["scopes"],_token_org=token["org_id"],_api_token_id=str(token["_id"]))
+        request.state.api_user=user
+        return user
     token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(401, "Not authenticated")
@@ -152,6 +167,8 @@ class Ctx:
 
 async def get_ctx(request: Request) -> Ctx:
     user = await get_current_user(request)
+    if user.get("_token_org") and request.headers.get("X-Org-Id") not in {None,user["_token_org"]}:
+        raise HTTPException(404,"Organization not found")
     org_id = user.get("_token_org") or request.headers.get("X-Org-Id") or user.get("active_org_id")
     if not org_id:
         raise HTTPException(409, "No active organization")

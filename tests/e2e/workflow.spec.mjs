@@ -314,6 +314,16 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
     const otherPage = await otherContext.newPage();
     await login(otherPage, email, password);
     await page.getByTestId('nav-organization').click();
+    await page.getByTestId('new-api-token').click();
+    await page.getByTestId('field-name').fill('Synthetic browser token');
+    const token = await submit(page, '/api-tokens');
+    await expect(page.getByTestId('created-api-token')).toContainText('vaptx_');
+    await page.getByTestId('close-created-api-token').click();
+    await expect(page.getByTestId('workspace-modal')).toBeHidden();
+    const tokenRevoked=page.waitForResponse(r=>r.url().endsWith(`/api/api-tokens/${token.id}/revoke`)&&r.request().method()==='POST');
+    await page.getByTestId(`revoke-api-token-${token.id}`).click();
+    expect((await tokenRevoked).ok()).toBeTruthy();
+    await expect(page.getByTestId(`revoke-api-token-${token.id}`)).toHaveCount(0);
     await expect(page.getByTestId('sessions-table').locator('tbody tr')).toHaveCount(2);
     const revoked = page.waitForResponse(response => response.url().endsWith('/api/auth/sessions/revoke-others') && response.request().method() === 'POST');
     await page.getByTestId('revoke-other-sessions').click();
