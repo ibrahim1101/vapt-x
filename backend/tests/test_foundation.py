@@ -279,3 +279,35 @@ class FindingExportTests(unittest.IsolatedAsyncioTestCase):
                 await reporting.export_findings('foreign', 'json', ctx)
             self.assertEqual(error.exception.status_code, 404)
             repo_cls.return_value.complete_list.assert_not_awaited()
+
+
+class ScopeRevocationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_revocation_persists_reason_and_actor(self):
+        import workflow
+        from core import Ctx
+        with patch.object(workflow, 'Repository') as repo_cls, patch.object(workflow, 'audit', AsyncMock()) as audit:
+            repo = repo_cls.return_value
+            repo.get = AsyncMock(return_value={'authorized': True})
+            repo.update = AsyncMock(return_value={'authorized': False})
+            result = await workflow.revoke_scope('scope-a', workflow.ScopeRevocationInput(reason=' Engagement ended '), Ctx({'id': 'alice'}, 'org-a', 'security_lead'))
+            self.assertFalse(result['authorized'])
+            fields = repo.update.call_args.args[2]
+            self.assertEqual(fields['revocation_reason'], 'Engagement ended')
+            self.assertEqual(fields['revoked_by'], 'alice')
+            audit.assert_awaited_once()
+
+    async def test_already_revoked_scope_is_idempotent(self):
+        import workflow
+        from core import Ctx
+        with patch.object(workflow, 'Repository') as repo_cls:
+            repo_cls.return_value.get = AsyncMock(return_value={'authorized': False, 'revocation_reason': 'Original reason'})
+            repo_cls.return_value.update = AsyncMock()
+            result = await workflow.revoke_scope('scope-a', workflow.ScopeRevocationInput(reason='Another reason'), Ctx({'id': 'alice'}, 'org-a', 'org_admin'))
+            self.assertEqual(result['revocation_reason'], 'Original reason')
+            repo_cls.return_value.update.assert_not_awaited()
+
+    def test_blank_reason_is_rejected(self):
+        from workflow import ScopeRevocationInput
+        from pydantic import ValidationError
+        with self.assertRaises(ValidationError):
+            ScopeRevocationInput(reason='     ')

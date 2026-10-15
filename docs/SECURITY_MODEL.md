@@ -39,3 +39,9 @@ A scope authorizes an exact normalized host rather than a wildcard/subdomain ran
 8. Resolve report/comparison pagination so incomplete data cannot mislead security decisions.
 
 Do not use real customer evidence in tests or commit `.env` credentials. Active testing is restricted to owned fixtures or explicitly approved targets and windows. No exploit, persistence, stealth, credential-attack or destructive scanner functionality is part of this design.
+
+## Revocation behavior
+
+Organization administrators/security leads can revoke an owned scope with a recorded reason. New scans/imports and queued jobs' pre-execution authorization checks reject revoked scopes. Revocation does not interrupt a check already executing; existing tool/HTTP timeouts bound that work. Active cancellation remains separate unfinished work.
+
+Session management is account-scoped, independent of selected organization. Listing/revocation queries always filter by authenticated user, active state and expiry. Targeted revocation is atomic; revoking all other sessions excludes the current session. Current-session revocation clears cookies. Returned session metadata contains no access/refresh tokens, password material, IP or browser fingerprints.

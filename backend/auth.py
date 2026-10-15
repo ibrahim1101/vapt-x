@@ -139,6 +139,45 @@ async def logout(response: Response, user=Depends(get_current_user)):
     return {"ok": True}
 
 
+@router.get("/auth/sessions")
+async def list_sessions(user=Depends(get_current_user)):
+    records = await db.sessions.find(
+        {"user_id": user["id"], "revoked": False, "expires_at": {"$gt": iso()}},
+        {"_id": 1, "created_at": 1, "expires_at": 1},
+    ).sort([("created_at", -1), ("_id", -1)]).to_list(101)
+    return {"sessions": [
+        {"id": str(row["_id"]), "created_at": row.get("created_at"),
+         "expires_at": row["expires_at"], "current": str(row["_id"]) == user["_sid"]}
+        for row in records[:100]
+    ], "has_more": len(records) > 100}
+
+
+@router.post("/auth/sessions/revoke-others")
+async def revoke_other_sessions(user=Depends(get_current_user)):
+    result = await db.sessions.update_many(
+        {"user_id": user["id"], "_id": {"$ne": user["_sid"]},
+         "revoked": False, "expires_at": {"$gt": iso()}},
+        {"$set": {"revoked": True}},
+    )
+    return {"revoked_count": result.modified_count}
+
+
+@router.post("/auth/sessions/{session_id}/revoke")
+async def revoke_session(session_id: str, response: Response, user=Depends(get_current_user)):
+    session = await db.sessions.find_one_and_update(
+        {"_id": session_id, "user_id": user["id"], "revoked": False,
+         "expires_at": {"$gt": iso()}},
+        {"$set": {"revoked": True}},
+    )
+    if not session:
+        raise HTTPException(404, "Active session not found")
+    current = session_id == user["_sid"]
+    if current:
+        for key in ("access_token", "refresh_token", "csrf"):
+            response.delete_cookie(key, path="/", secure=not local_cookie_mode(), samesite="lax")
+    return {"ok": True, "current": current}
+
+
 @router.post("/organizations")
 async def create_org(body: OrgInput, user=Depends(get_current_user)):
     org = await insert_identity("organizations", {"name": body.name, "created_by": user["id"], "created_at": iso()})

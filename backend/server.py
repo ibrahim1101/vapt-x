@@ -19,6 +19,7 @@ async def lifespan(app):
     try:
         await db.command('ping')
         await seed_admin()
+        await db.sessions.create_index([('user_id', 1), ('revoked', 1), ('created_at', -1)])
         for collection in ('projects', 'scopes', 'assets', 'assessments', 'jobs', 'findings', 'tasks', 'evidence', 'evidence_chunks', 'reports', 'report_files', 'audit_events', 'ai_sessions'):
             await db[collection].create_index([('org_id', 1), ('created_at', -1)])
         await db.evidence_chunks.create_index([('org_id', 1), ('evidence_id', 1), ('index', 1)], unique=True)

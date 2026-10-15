@@ -21,11 +21,11 @@ Batch exit: clean install, backend startup, frontend build, login/refresh/logout
 Priority order:
 
 1. Exercise tenant isolation and role enforcement on every resource, including downloads, AI sessions and jobs.
-2. Fix unpaginated repository limits: workspace, reports and comparisons currently default to 1,000 documents although imports allow 2,000 findings. Never silently present truncated coverage as complete.
+2. Finish server-side pagination/search: workspace truncation is disclosed and reports/comparisons now require complete sets up to 5,000 rows; large inventories still need full navigation.
 3. Validate scanner scope, DNS pinning, redirect blocking, time windows and resource limits using synthetic fixtures and the owned training target.
 4. Report-download integrity/missing-file handling now has regression coverage; validate large reports and evidence completion races next.
 5. Complete assessment cancellation and bounded job cleanup; enforce concurrency across workers before enabling more than one API worker.
-6. Add import fixtures for every supported format; make import attribution, malformed-input errors and partial failures explicit.
+6. Extend the 18 importer fixtures to additional upstream schema variants and partial-persistence failure cases.
 7. Add project edits/archive and genuine asset search/pagination; preserve historical references.
 8. Complete workflow browser tests for project → scope → asset → assessment → scan/import → finding → evidence → task → report → retest.
 

@@ -71,3 +71,13 @@ Local result: **50 passed, 1 skipped** via `cd backend && /tmp/vaptx-venv/bin/py
 [CI run 38690964773](https://github.com/ibrahim1101/vapt-x/actions/runs/38690964773), commit `8e8d0d35a2daab89fbd71b53edfcc11b671ffdde`, passed on Python 3.11 and 3.12 with **51 passed**, no skips. This executes the expanded MongoDB core assessment/import/triage/task/evidence/report/retest workflow and cross-organization denial checks.
 
 Implemented `GET /api/assessments/{id}/findings/export?format=json|csv`. Both formats use tenant-scoped assessment access, a complete bounded findings set, a field allowlist and an audit event. JSON includes a schema version and provenance notice; CSV escapes spreadsheet formula prefixes. A Reports-page assessment selector and download actions connect to the endpoint. Local backend suite: **53 passed, 1 skipped**. Extended integration asserts imported provenance remains unchanged after triage and both export formats deny a foreign organization. Frontend tests/build and new export integration remain pending until subsequent evidence is recorded.
+
+## Scope revocation, session management and container verification
+
+Exports batch `339e77bb6fba1334b872016095d7452a49c03519` passed backend [CI run 38691459362](https://github.com/ibrahim1101/vapt-x/actions/runs/38691459362), **54 passed** on both Python versions. Docker [run 38691459505](https://github.com/ibrahim1101/vapt-x/actions/runs/38691459505) built and started the actual image with MongoDB, checked health/non-root UID/dependencies, and removed disposable resources.
+
+Added scope revocation with an authorization permission check, reason, actor/time and audit event; repeated revocation preserves the original decision. Assets & scope now has a revoke form that explains already-running checks may finish. Authorization is rechecked before queued jobs execute; revoked scopes reject new scans/imports.
+
+Added owned active-session listing and atomic revocation, including revoke-all-others and current-session cookie clearing. API responses expose session metadata only. The settings panel provides session actions; session IDs are abbreviated in the UI. Added the sessions lookup index. No device fingerprint/IP/UA claims are made.
+
+Local suite before publishing this batch: **61 passed, 1 skipped**. Extended disposable Mongo flow covers scope withdrawal/new-import denial, owned session revocation, revoke-others/current preservation, foreign-session denial and current-session signout. This new integration and UI tests await subsequent CI/build evidence.

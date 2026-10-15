@@ -114,6 +114,23 @@ class PersistenceTests(unittest.TestCase):
                     # Tampering with stored bytes must fail closed, not become a successful download.
                     mongo[database].report_files.update_one({'report_id': report['id']}, {'$set': {'data': base64.b64encode(b'tampered').decode()}})
                     assert client.get('/api/reports/' + report['id'] + '/download').status_code == 409
+                    revoked = post('scopes/' + scope['id'] + '/revoke', {'reason': 'Synthetic engagement completed'})
+                    assert revoked['authorized'] is False
+                    assert revoked['revocation_reason'] == 'Synthetic engagement completed'
+                    blocked = client.post('/api/imports', headers=headers(), json={'assessment_id': assessment['id'], 'asset_id': asset['id'], 'scanner': 'semgrep', 'content': fixture})
+                    assert blocked.status_code == 403, blocked.text
+                    sessions = client.get('/api/auth/sessions').json()
+                    alice_session_id = next(session['id'] for session in sessions['sessions'] if session['current'])
+                    assert all(set(session) == {'id', 'created_at', 'expires_at', 'current'} for session in sessions['sessions'])
+                    other_id = uuid.uuid4().hex
+                    mongo[database].sessions.insert_one({'_id': other_id, 'user_id': user['id'], 'revoked': False, 'created_at': now.isoformat(), 'expires_at': (now+timedelta(days=1)).isoformat()})
+                    result = post('auth/sessions/' + other_id + '/revoke', {})
+                    assert result['current'] is False
+                    assert mongo[database].sessions.find_one({'_id': other_id})['revoked'] is True
+                    for _ in range(2):
+                        mongo[database].sessions.insert_one({'_id': uuid.uuid4().hex, 'user_id': user['id'], 'revoked': False, 'created_at': now.isoformat(), 'expires_at': (now+timedelta(days=1)).isoformat()})
+                    assert post('auth/sessions/revoke-others', {})['revoked_count'] == 2
+                    assert client.get('/api/auth/me').status_code == 200
                     # A second organization cannot retrieve or mutate any first-organization resource.
                     response = client.post('/api/auth/register', headers=origin, json={'email': 'bob@example.com', 'password': 'integration-password'})
                     assert response.status_code == 200, response.text
@@ -122,6 +139,14 @@ class PersistenceTests(unittest.TestCase):
                         assert client.get('/api/' + path).status_code == 404, path
                     response = client.patch('/api/findings/' + finding['id'], headers=headers(), json={'status': 'resolved'})
                     assert response.status_code == 404
+                    response = client.post('/api/scopes/' + scope['id'] + '/revoke', headers=headers(), json={'reason': 'Foreign tenant attempt'})
+                    assert response.status_code == 404
+                    response = client.post('/api/auth/sessions/' + alice_session_id + '/revoke', headers=headers())
+                    assert response.status_code == 404
+                    bob_sessions = client.get('/api/auth/sessions').json()['sessions']
+                    bob_current = next(session['id'] for session in bob_sessions if session['current'])
+                    assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True
+                    assert client.get('/api/auth/me').status_code == 401
             finally:
                 mongo.drop_database(database)
                 mongo.close()

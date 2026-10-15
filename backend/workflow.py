@@ -37,6 +37,17 @@ class ScopeInput(BaseModel):
         return value.astimezone(timezone.utc)
 
 
+class ScopeRevocationInput(BaseModel):
+    reason: str = Field(min_length=5, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def meaningful_reason(cls, value):
+        if len(value.strip()) < 5:
+            raise ValueError("Provide a reason of at least five non-whitespace characters")
+        return value.strip()
+
+
 class AssetInput(BaseModel):
     project_id: str
     scope_id: str
@@ -129,6 +140,19 @@ async def create_scope(body: ScopeInput, ctx=Depends(get_ctx)):
     if not set(body.allowed_scanners) <= SCANNERS:
         raise HTTPException(422, "Unsupported scanner permission")
     return await repo.add("scopes", {**body.model_dump(mode="json"), "host": host})
+
+
+@router.post("/scopes/{scope_id}/revoke")
+async def revoke_scope(scope_id: str, body: ScopeRevocationInput, ctx=Depends(get_ctx)):
+    ctx.require("authorize")
+    repo = Repository(ctx)
+    scope = await repo.get("scopes", scope_id)
+    if not scope.get("authorized"):
+        return scope
+    result = await repo.update("scopes", scope_id, {"authorized": False,
+        "revoked_at": iso(), "revoked_by": ctx.uid, "revocation_reason": body.reason})
+    await audit(ctx, "scope.revoked", "scopes", scope_id, {"reason": body.reason})
+    return result
 
 
 @router.post("/assets")
