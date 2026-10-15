@@ -162,7 +162,14 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await page.getByTestId('nav-reports').click();
   await page.getByTestId('new-report').click();
   await page.getByTestId('field-assessment_id').selectOption(assessment.id);
-  await saveModal(page, `/assessments/${assessment.id}/report`);
+  await page.getByTestId('field-branding').fill('Synthetic CI brand');
+  await page.getByTestId('report-sections').fill(JSON.stringify([{heading:'Synthetic context',text:'Generated only from synthetic CI observations.'}]));
+  const previewed = page.waitForResponse(r => r.url().endsWith(`/api/assessments/${assessment.id}/report/preview`) && r.request().method() === 'POST');
+  await page.getByTestId('preview-report').click();
+  expect((await previewed).ok()).toBeTruthy();
+  const report = await saveModal(page, `/assessments/${assessment.id}/report`);
+  expect(report.version).toBe(1);
+
   const pdfPromise = page.waitForEvent('download');
   await page.getByTestId(/^download-report-/).click();
   const pdf = await pdfPromise;
@@ -172,6 +179,14 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   expect(pdfBytes.subarray(0, 5).toString()).toBe('%PDF-');
   expect(pdfBytes.length).toBeGreaterThan(1000);
   await pdf.saveAs(testInfo.outputPath('synthetic-assessment.pdf'));
+  const snapshotPromise = page.waitForEvent('download');
+  await page.getByTestId(`snapshot-report-${report.id}`).click();
+  const snapshotDownload = await snapshotPromise;
+  const snapshot = JSON.parse(await readFile(await snapshotDownload.path(),'utf8'));
+  expect(snapshot.options.branding).toBe('Synthetic CI brand');
+  expect(snapshot.findings).toHaveLength(1);
+  expect(snapshot.findings[0].verification).toBe('imported-unverified');
+
 
   await page.getByTestId('field-export-assessment').selectOption(assessment.id);
   const jsonPromise = page.waitForEvent('download');

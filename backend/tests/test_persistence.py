@@ -166,6 +166,15 @@ class PersistenceTests(unittest.TestCase):
                     report = post('assessments/' + assessment['id'] + '/report', {})
                     response = client.get('/api/reports/' + report['id'] + '/download')
                     assert response.status_code == 200 and response.content.startswith(b'%PDF-')
+                    assert report['version'] == 1 and report['status'] == 'ready'
+                    snapshot = client.get('/api/reports/' + report['id'] + '/snapshot').json()
+                    assert snapshot['findings'][0]['verification'] == 'imported-unverified'
+                    assert len(snapshot['findings']) == 1
+                    executive = post('assessments/' + assessment['id'] + '/report', {'template':'executive','branding':'Synthetic CI brand','sections':[{'heading':'Context','text':'Synthetic report review'}]})
+                    assert executive['version'] == 2 and executive['template'] == 'executive'
+                    assert client.get('/api/reports',params={'assessment_id':assessment['id']}).json()['total'] == 2
+                    response = client.post('/api/assessments/' + assessment['id'] + '/report/preview',headers=headers(),json={'template':'remediation'})
+                    assert response.status_code == 200 and response.content.startswith(b'%PDF-')
                     retest = post('assessments/' + assessment['id'] + '/retest', {})
                     response = client.get('/api/assessments/' + retest['id'] + '/comparison')
                     assert response.status_code == 200, response.text
@@ -307,6 +316,7 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/assets/' + asset['id'] + '/inventory').status_code == 404
                     assert client.get('/api/findings/' + finding['id'] + '/comments').status_code == 404
                     assert client.get('/api/sla-policy').json()['days']['high'] == 7
+                    assert client.get('/api/reports/' + report['id'] + '/snapshot').status_code == 404
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])
                     assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True
