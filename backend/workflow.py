@@ -177,7 +177,7 @@ class TaskUpdate(BaseModel):
 @router.get("/capabilities")
 async def capabilities(ctx=Depends(get_ctx)):
     ctx.require("read")
-    return {"safe": True, "nmap": bool(shutil.which(os.environ["NMAP_BINARY"])), "imports": ["nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov"], "ai": bool(os.environ.get("ANTHROPIC_API_KEY")) and find_spec("anthropic") is not None, "limitations": ["Nmap uses TCP connect on four web ports only; no exploit scripts.", "Remote private networks are blocked. Only the managed training target may use loopback.", "Imports are scanner-authored, unverified evidence, not a fresh scan.", "Interrupted jobs are marked interrupted after a worker restart; re-run manually."]}
+    return {"safe": True, "nmap": bool(shutil.which(os.environ["NMAP_BINARY"])), "inventory_imports": ["openapi", "cyclonedx", "spdx"], "imports": ["nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov"], "ai": bool(os.environ.get("ANTHROPIC_API_KEY")) and find_spec("anthropic") is not None, "limitations": ["Nmap uses TCP connect on four web ports only; no exploit scripts.", "Remote private networks are blocked. Only the managed training target may use loopback.", "Imports are scanner-authored, unverified evidence, not a fresh scan.", "Interrupted jobs are marked interrupted after a worker restart; re-run manually."]}
 
 
 @router.get("/workspace")

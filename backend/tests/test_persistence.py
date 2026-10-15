@@ -60,7 +60,7 @@ class PersistenceTests(unittest.TestCase):
                     scope = post('scopes', {'project_id': project['id'], 'target': 'training://local',
                         'authorization_reference': 'Synthetic integration fixture', 'authorized': True,
                         'starts_at': (now-timedelta(hours=1)).isoformat(), 'ends_at': (now+timedelta(hours=1)).isoformat(),
-                        'allowed_scanners': ['safe', 'semgrep', 'gitleaks', 'checkov']})
+                        'allowed_scanners': ['safe', 'semgrep', 'gitleaks', 'checkov', 'openapi', 'cyclonedx', 'spdx']})
                     response = client.patch('/api/projects/' + project['id'], headers=headers(),
                         json={'name': 'Updated fixture project', 'description': 'Retained context', 'owner': 'Fixture team', 'status': 'archived'})
                     assert response.status_code == 200, response.text
@@ -173,11 +173,6 @@ class PersistenceTests(unittest.TestCase):
                     # Tampering with stored bytes must fail closed, not become a successful download.
                     mongo[database].report_files.update_one({'report_id': report['id']}, {'$set': {'data': base64.b64encode(b'tampered').decode()}})
                     assert client.get('/api/reports/' + report['id'] + '/download').status_code == 409
-                    revoked = post('scopes/' + scope['id'] + '/revoke', {'reason': 'Synthetic engagement completed'})
-                    assert revoked['authorized'] is False
-                    assert revoked['revocation_reason'] == 'Synthetic engagement completed'
-                    blocked = client.post('/api/imports', headers=headers(), json={'assessment_id': assessment['id'], 'asset_id': asset['id'], 'scanner': 'semgrep', 'content': fixture})
-                    assert blocked.status_code == 403, blocked.text
                     sessions = client.get('/api/auth/sessions').json()
                     alice_session_id = next(session['id'] for session in sessions['sessions'] if session['current'])
                     assert all(set(session) == {'id', 'created_at', 'expires_at', 'current'} for session in sessions['sessions'])
@@ -225,6 +220,23 @@ class PersistenceTests(unittest.TestCase):
                         observed = mongo[database].findings.find_one({'job_id':imported['id']})
                         assert observed['verification'] == 'imported-unverified'
                         assert 'synthetic-secret-do-not-store' not in json.dumps(observed)
+                    for format, payload in [('openapi',{'openapi':'3.1.0','paths':{'/synthetic':{'get':{'summary':'Synthetic operation'}}}}),
+                        ('cyclonedx',{'bomFormat':'CycloneDX','specVersion':'1.7','components':[{'name':'fixture-library','version':'1.0'}]}),
+                        ('spdx',{'spdxVersion':'SPDX-2.3','packages':[{'SPDXID':'SPDXRef-fixture','name':'fixture-spdx','versionInfo':'1.0'}]})]:
+                        job_inventory = post('inventory-imports',{'assessment_id':retried['id'],'asset_id':asset['id'],
+                            'format':format,'content':json.dumps(payload)})
+                        assert job_inventory['finding_count'] == 0 and job_inventory['inventory_count'] == 1
+                        repeated = post('inventory-imports',{'assessment_id':retried['id'],'asset_id':asset['id'],
+                            'format':format,'content':json.dumps(payload)})
+                        assert repeated['inventory_count'] == 0 and repeated['duplicate_count'] == 1
+                    inventory = client.get('/api/assets/' + asset['id'] + '/inventory').json()
+                    assert inventory['total'] == 3
+                    assert all('severity' not in row for row in inventory['items'])
+                    revoked = post('scopes/' + scope['id'] + '/revoke', {'reason': 'Synthetic engagement completed'})
+                    assert revoked['authorized'] is False
+                    assert revoked['revocation_reason'] == 'Synthetic engagement completed'
+                    blocked = client.post('/api/imports', headers=headers(), json={'assessment_id': assessment['id'], 'asset_id': asset['id'], 'scanner': 'semgrep', 'content': fixture})
+                    assert blocked.status_code == 403, blocked.text
                     # Navigation must reach findings beyond the workspace's 1,000-row limit.
                     mongo[database].findings.insert_many([{
                         '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],
@@ -275,6 +287,7 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/project-templates').json() == []
                     assert client.post('/api/projects', headers=headers(), json={'name':'Foreign template attempt','template_id':template['id']}).status_code == 404
                     assert client.get('/api/findings/' + finding['id'] + '/intelligence/CVE-2026-12345').status_code == 404
+                    assert client.get('/api/assets/' + asset['id'] + '/inventory').status_code == 404
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])
                     assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True

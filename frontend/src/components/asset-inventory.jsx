@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { InventoryDetail } from './inventory-detail';
 import { api, errorText } from '../lib/api';
 import { Action, Badge, Empty, Field, Panel, Select } from './workspace-ui';
 
 export function AssetInventory({ data, open, canWrite, project }) {
+  const [view,setView]=useState(null);
   const [criticality,setCriticality]=useState('all'),[search,setSearch]=useState('');
   const [offset,setOffset]=useState(0),[result,setResult]=useState(null),[error,setError]=useState(''),[retry,setRetry]=useState(0);
   useEffect(()=>{setOffset(0);},[project,search,criticality]);
@@ -20,11 +22,12 @@ export function AssetInventory({ data, open, canWrite, project }) {
       {['all','critical','high','medium','low'].map(c=><option key={c} value={c}>{c}</option>)}
     </Select></Field></div>
     {error?<div role="alert"><p>{error}</p><Action secondary onClick={()=>setRetry(v=>v+1)}>Retry</Action></div>:!result?<p role="status">Loading assets…</p>:<div className="data-table" data-testid="assets-table">
-      {result.items.length?<div className="table-scroll"><table><thead><tr>{['Asset','Type','Owner','Criticality','Tags',...(canWrite?['Manage']:[])].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>{result.items.map(a=><tr key={a.id} data-testid={`assets-row-${a.id}`}>
+      {result.items.length?<div className="table-scroll"><table><thead><tr>{['Asset','Type','Owner','Criticality','Tags','Inventory',...(canWrite?['Manage']:[])].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>{result.items.map(a=><tr key={a.id} data-testid={`assets-row-${a.id}`}>
         <td data-label="Asset"><div className="cell-main"><strong>{a.name}</strong><small>{a.target}</small></div></td><td data-label="Type">{a.kind}</td><td data-label="Owner">{a.owner||'Unassigned'}</td><td data-label="Criticality"><Badge type={a.criticality||'medium'}>{a.criticality||'medium'}</Badge></td><td data-label="Tags">{(a.tags||[]).join(', ')||'—'}</td>
-        {canWrite&&<td data-label="Manage"><Action secondary testId={`edit-asset-${a.id}`} onClick={()=>open('asset-edit',a)}>Edit metadata</Action></td>}
+        <td data-label="Inventory"><Action secondary testId={`asset-inventory-${a.id}`} onClick={()=>setView(a)}>View inventory</Action></td>{canWrite&&<td data-label="Manage"><Action secondary testId={`edit-asset-${a.id}`} onClick={()=>open('asset-edit',a)}>Edit metadata</Action></td>}
       </tr>)}</tbody></table></div>:<Empty title="No matching assets" description="Change the filters or register an asset in this project."/>}
       <div className="table-footer"><span data-testid="assets-page-total">{result.total} matching assets · {result.items.length?`${offset+1}–${offset+result.items.length}`:'0'} shown</span><div><button data-testid="assets-previous" disabled={offset===0} onClick={()=>setOffset(Math.max(0,offset-25))}>Previous</button><button data-testid="assets-next" disabled={!result.has_more} onClick={()=>setOffset(offset+25)}>Next</button></div></div>
     </div>}
+    {view&&<InventoryDetail asset={view} onClose={()=>setView(null)}/>}
   </Panel>;
 }

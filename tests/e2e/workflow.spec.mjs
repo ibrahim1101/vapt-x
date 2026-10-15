@@ -248,6 +248,26 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
     expect(imported.raw_output).not.toContain('synthetic-secret-do-not-store');
   }
 
+
+  for (const [format, fixture] of [
+    ['openapi',{openapi:'3.1.0',paths:{'/synthetic':{get:{summary:'Synthetic operation'}}}}],
+    ['cyclonedx',{bomFormat:'CycloneDX',specVersion:'1.7',components:[{name:'fixture-library',version:'1.0'}]}],
+    ['spdx',{spdxVersion:'SPDX-2.3',packages:[{SPDXID:'SPDXRef-fixture',name:'fixture-spdx',versionInfo:'1.0'}]}],
+  ]) {
+    await page.getByTestId(`inventory-import-${retried.id}`).click();
+    await page.getByTestId('field-asset_id').selectOption(asset.id);
+    await page.getByTestId('field-scanner').selectOption(format);
+    await page.getByTestId('field-content').fill(JSON.stringify(fixture));
+    const imported = await saveModal(page, '/inventory-imports');
+    expect(imported.finding_count).toBe(0);
+    expect(imported.inventory_count).toBe(1);
+  }
+  await page.getByTestId('nav-assets-scope').click();
+  await page.getByTestId(`asset-inventory-${asset.id}`).click();
+  await expect(page.getByTestId('inventory-table')).toContainText('GET /synthetic');
+  await expect(page.getByTestId('inventory-table')).toContainText('fixture-library');
+  await page.getByRole('button', {name:'Close',exact:true}).click();
+  await page.getByTestId('nav-assessments').click();
   await page.getByTestId(`assessment-history-${retest.id}`).click();
   await expect(page.getByTestId('workspace-modal')).toContainText('assessment.cancelled');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
