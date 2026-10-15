@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field, field_validator
-from core import get_ctx, iso, audit
+from core import get_ctx, iso, audit, db, DomainDocument
+from pymongo import ReturnDocument
 from repository import Repository
 from scanners import target_host, validate_scope, run_job, SCANNERS, store_findings
 from importers import parse_report
@@ -226,7 +227,42 @@ async def get_job(job_id: str, ctx=Depends(get_ctx)):
 @router.patch("/findings/{finding_id}")
 async def triage(finding_id: str, body: TriageInput, ctx=Depends(get_ctx)):
     ctx.require("triage")
-    return await Repository(ctx).update("findings", finding_id, body.model_dump())
+    repo = Repository(ctx)
+    current = await repo.get("findings", finding_id)
+    previous_status = current.get("status", "open")
+    previous_notes = current.get("notes", "")
+    if body.status == previous_status and body.notes == previous_notes:
+        return current
+    timestamp = iso()
+    event = {"previous_status": previous_status, "status": body.status,
+             "previous_notes": previous_notes, "notes": body.notes,
+             "actor_id": ctx.uid, "actor_email": ctx.user.get("email"),
+             "created_at": timestamp}
+    # Compare the exact state read, including absent fields on legacy documents.
+    # The counter additionally rejects ABA races where status/notes cycle back.
+    expected = {key: current[key] if key in current else {"$exists": False}
+                for key in ("status", "notes", "history_total")}
+    updated = await db.findings.find_one_and_update(
+        repo.query({"_id": finding_id, **expected}),
+        {"$set": {"status": body.status, "notes": body.notes, "updated_at": timestamp},
+         "$push": {"triage_history": {"$each": [event], "$slice": -100}},
+         "$inc": {"history_total": 1}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if updated is None:
+        raise HTTPException(409, "Finding changed during triage. Reload it and try again.")
+    await audit(ctx, "finding.triaged", "findings", finding_id,
+                {"previous_status": previous_status, "status": body.status})
+    return DomainDocument.from_mongo(updated).model_dump()
+
+
+@router.get("/findings/{finding_id}/history")
+async def finding_history(finding_id: str, ctx=Depends(get_ctx)):
+    ctx.require("read")
+    item = await Repository(ctx).get("findings", finding_id)
+    events = item.get("triage_history", [])[-100:]
+    total = item.get("history_total", len(events))
+    return {"events": events, "has_more": total > len(events), "total": total}
 
 
 @router.post("/tasks")

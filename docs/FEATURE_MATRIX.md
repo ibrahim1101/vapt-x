@@ -48,15 +48,11 @@ Priority: P0 security/startup blockers, P1 core product, P2 expansion, P3 later 
 | Backend regression suite/CI | Quality | P0 | In progress | Original batch: 15 passed in Python 3.11/3.12 CI; follow-up: 15 passed, 1 skipped locally | Baseline contained no executable suite beyond empty package | `backend/pytest.ini`, `backend/tests/`, `.github/workflows/backend.yml` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
 | Browser E2E/Docker integration/restore drills | Quality | P1 | Not started | None | Requires isolated runtime and repeatable fixtures | — | — |
 | Desktop packaging | Release | P3 | Deferred | None | Web stability first | — | — |
-
-A feature becomes **Verified working** only for a stated tested scope. Passing helper tests does not establish browser functionality, persistence, full authorization or absence of unrelated regressions. Use **Blocked** when a concrete dependency prevents the next required check, and document it in the development log.
-
-### Continued implementation, 2026-10-15
-
-| Feature | Category | Priority | Implementation status | Test status | Known limitations | Relevant source files | Related pull request |
-| --- | --- | --- | --- | --- | --- | --- | --- |
 | Assessment finding CSV/JSON export | Reporting | P1 | In progress | Backend unit tests pass; expanded Mongo integration pending CI; UI build pending | Complete set limited to 5,000; CSV formula cells escaped; no public sharing | `backend/reporting.py`, `frontend/src/components/finding-exports.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
 | Core import/evidence/PDF/retest/tenant workflow | Quality | P0 | Verified working | 51 tests pass in Python 3.11/3.12 CI with MongoDB | API integration only; browser and live external scanning remain unverified | `backend/tests/test_persistence.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-
 | Scope revocation with reason/actor | Authorization | P0 | In progress | Backend unit tests pass; real Mongo/UI checks pending | Queued jobs recheck; already running checks may finish within existing timeout | `backend/workflow.py`, `frontend/src/components/scope-revocation.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
 | Owned active-session listing/revocation | Identity | P0 | In progress | Five backend session tests pass; real Mongo/UI checks pending | Latest 100 shown with truncation flag; no device/IP labels or MFA | `backend/auth.py`, `frontend/src/components/session-settings.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
+
+| Finding triage history | Findings | P1 | In progress | Nine local backend tests pass; new Mongo/UI checks pending | Latest 100 retained, total reported; pre-tracking history not reconstructed | `backend/workflow.py`, `frontend/src/components/finding-history.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
+
+A feature becomes **Verified working** only for a stated tested scope. API integration evidence does not establish browser functionality, live scanner coverage, or production readiness.

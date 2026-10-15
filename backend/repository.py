@@ -11,7 +11,7 @@ class Repository:
         return {**(filters or {}), "org_id": self.ctx.org_id}
 
     async def list(self, collection, filters=None, limit=1000):
-        docs = await db[collection].find(self.query(filters)).sort("created_at", -1).limit(limit).to_list(limit)
+        docs = await db[collection].find(self.query(filters), {"triage_history": 0}).sort("created_at", -1).limit(limit).to_list(limit)
         return [DomainDocument.from_mongo(d).model_dump() for d in docs]
 
     async def complete_list(self, collection, filters=None, max_rows=5000):

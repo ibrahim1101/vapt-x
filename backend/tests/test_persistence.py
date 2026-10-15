@@ -70,6 +70,32 @@ class PersistenceTests(unittest.TestCase):
                     assert workspace['truncated_collections'] == []
                     response = client.patch('/api/findings/' + finding['id'], headers=headers(), json={'status': 'confirmed', 'notes': 'Manually reviewed synthetic fixture'})
                     assert response.status_code == 200, response.text
+                    history_path = '/api/findings/' + finding['id'] + '/history'
+                    history = client.get(history_path).json()
+                    assert history['total'] == 1 and history['has_more'] is False
+                    event = history['events'][0]
+                    assert event['previous_status'] == 'open' and event['status'] == 'confirmed'
+                    assert event['previous_notes'] == '' and event['notes'] == 'Manually reviewed synthetic fixture'
+                    assert event['actor_id'] == user['id'] and event['actor_email'] == 'alice@example.com'
+                    assert datetime.fromisoformat(event['created_at']).tzinfo is not None
+                    # Repeated identical triage is idempotent, including its durable history.
+                    response = client.patch('/api/findings/' + finding['id'], headers=headers(), json={'status': 'confirmed', 'notes': 'Manually reviewed synthetic fixture'})
+                    assert response.status_code == 200, response.text
+                    assert client.get(history_path).json()['total'] == 1
+                    # Seed only the disposable fixture's old history to exercise Mongo's bounded push.
+                    prior_events = [{**event, 'notes': 'Synthetic historical event ' + str(i)} for i in range(100)]
+                    mongo[database].findings.update_one({'_id': finding['id']}, {'$set': {'triage_history': prior_events, 'history_total': 105}})
+                    response = client.patch('/api/findings/' + finding['id'], headers=headers(), json={'status': 'confirmed', 'notes': 'Second synthetic review'})
+                    assert response.status_code == 200, response.text
+                    updated = response.json()
+                    assert updated['verification'] == 'imported-unverified'
+                    assert updated['source'] == 'import' and updated['severity'] == finding['severity']
+                    history = client.get(history_path).json()
+                    assert history['total'] == 106 and history['has_more'] is True
+                    assert len(history['events']) == 100
+                    assert history['events'][0]['notes'] == 'Synthetic historical event 1'
+                    assert history['events'][-1]['notes'] == 'Second synthetic review'
+                    assert history['events'][-1]['previous_notes'] == 'Manually reviewed synthetic fixture'
                     # Triage must never rewrite provenance or imply independent verification.
                     import csv, io
                     export_path = '/api/assessments/' + assessment['id'] + '/findings/export'
@@ -135,7 +161,7 @@ class PersistenceTests(unittest.TestCase):
                     response = client.post('/api/auth/register', headers=origin, json={'email': 'bob@example.com', 'password': 'integration-password'})
                     assert response.status_code == 200, response.text
                     post('organizations', {'name': 'Bob org'})
-                    for path in ['jobs/' + job['id'], 'evidence/' + evidence['id'] + '/download', 'reports/' + report['id'] + '/download', 'assessments/' + retest['id'] + '/comparison', 'assessments/' + assessment['id'] + '/findings/export?format=json', 'assessments/' + assessment['id'] + '/findings/export?format=csv']:
+                    for path in ['findings/' + finding['id'] + '/history', 'jobs/' + job['id'], 'evidence/' + evidence['id'] + '/download', 'reports/' + report['id'] + '/download', 'assessments/' + retest['id'] + '/comparison', 'assessments/' + assessment['id'] + '/findings/export?format=json', 'assessments/' + assessment['id'] + '/findings/export?format=csv']:
                         assert client.get('/api/' + path).status_code == 404, path
                     response = client.patch('/api/findings/' + finding['id'], headers=headers(), json={'status': 'resolved'})
                     assert response.status_code == 404

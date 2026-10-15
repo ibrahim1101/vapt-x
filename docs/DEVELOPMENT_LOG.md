@@ -81,3 +81,13 @@ Added scope revocation with an authorization permission check, reason, actor/tim
 Added owned active-session listing and atomic revocation, including revoke-all-others and current-session cookie clearing. API responses expose session metadata only. The settings panel provides session actions; session IDs are abbreviated in the UI. Added the sessions lookup index. No device fingerprint/IP/UA claims are made.
 
 Local suite before publishing this batch: **61 passed, 1 skipped**. Extended disposable Mongo flow covers scope withdrawal/new-import denial, owned session revocation, revoke-others/current preservation, foreign-session denial and current-session signout. This new integration and UI tests await subsequent CI/build evidence.
+
+## Finding triage history and frontend CI publication
+
+Scope/session batch `2e30a78ff8305fa849ac0fdfe664797187a77adc` passed [backend CI 38692055562](https://github.com/ibrahim1101/vapt-x/actions/runs/38692055562): **62 passed** on Python 3.11 and 3.12 with real MongoDB.
+
+Added atomic finding triage history: status/notes before and after, actor/email and timestamp, latest 100 events plus total count. A conditional update checks the previously read state and history counter; conflicting writes return 409. Identical updates are idempotent. Source/verification/severity are preserved. The detail modal reads the tenant-scoped history endpoint and explicitly labels retention and pre-tracking limitations. Collection listings omit the potentially large history array; the dedicated history endpoint supplies it when requested.
+
+Local backend suite: **70 passed, 1 skipped**, including nine new history tests. The expanded disposable Mongo fixture tests history persistence, idempotency, bounded retention and cross-tenant denial; remote CI remains required for these new assertions.
+
+Published frontend state-isolation/project-filter/API regressions and a Node 22/Yarn frontend workflow. The local install was too slow to complete; CI will resolve dependencies, run Jest/build and preserve a lockfile artifact for committing. No successful frontend build is claimed yet. GitHub publication was briefly blocked by automatic review; reading the user's explicit repository/commit/PR handoff and verifying connected ownership/push permission resolved authorization, and publication succeeded.
