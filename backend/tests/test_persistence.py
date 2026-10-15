@@ -67,6 +67,13 @@ class PersistenceTests(unittest.TestCase):
                     assert response.status_code == 200, response.text
                     asset = post('assets', {'project_id': project['id'], 'scope_id': scope['id'],
                         'name': 'Owned fixture', 'target': 'training://local'})
+                    response = client.patch('/api/assets/' + asset['id'], headers=headers(), json={
+                        'name': 'Updated asset', 'owner': 'Fixture team', 'criticality': 'high',
+                        'tags': [' production ', 'api', 'api'], 'target': 'https://different.example'})
+                    assert response.status_code == 200, response.text
+                    saved = mongo[database].assets.find_one({'_id': asset['id']})
+                    assert saved['target'] == 'training://local' and saved['scope_id'] == scope['id']
+                    assert saved['tags'] == ['production', 'api'] and saved['criticality'] == 'high'
                     assessment = post('assessments', {'project_id': project['id'], 'name': 'Fixture assessment', 'asset_ids': [asset['id']]})
                     fixture = json.dumps({'results': [{'check_id': 'fixture-rule', 'path': 'fixture.py',
                         'extra': {'message': 'Synthetic observation', 'severity': 'WARNING'}}]})
@@ -178,6 +185,8 @@ class PersistenceTests(unittest.TestCase):
                     response = client.post('/api/auth/sessions/' + alice_session_id + '/revoke', headers=headers())
                     assert response.status_code == 404
                     response = client.patch('/api/projects/' + project['id'], headers=headers(), json={'name': 'Foreign edit'})
+                    assert response.status_code == 404
+                    response = client.patch('/api/assets/' + asset['id'], headers=headers(), json={'name': 'Foreign edit'})
                     assert response.status_code == 404
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])

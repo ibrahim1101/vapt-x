@@ -69,6 +69,32 @@ class AssetInput(BaseModel):
     kind: Literal["web", "host", "repository", "container"] = "web"
 
 
+class AssetUpdate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    owner: str = Field(default="", max_length=150)
+    criticality: Literal["critical", "high", "medium", "low"] = "medium"
+    tags: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("name")
+    @classmethod
+    def meaningful_name(cls, value):
+        if len(value.strip()) < 2:
+            raise ValueError("Provide an asset name of at least two characters")
+        return value.strip()
+
+    @field_validator("tags")
+    @classmethod
+    def normalized_tags(cls, values):
+        result = []
+        for value in values:
+            value = value.strip()
+            if not value or len(value) > 50:
+                raise ValueError("Tags must contain between 1 and 50 characters")
+            if value not in result:
+                result.append(value)
+        return result
+
+
 class AssessmentInput(BaseModel):
     project_id: str
     name: str = Field(min_length=2, max_length=120)
@@ -187,6 +213,14 @@ async def create_asset(body: AssetInput, ctx=Depends(get_ctx)):
     if scope["project_id"] != body.project_id or host != scope["host"]:
         raise HTTPException(403, "Asset is outside the project's exact authorized host scope")
     return await repo.add("assets", body.model_dump())
+
+
+@router.patch("/assets/{asset_id}")
+async def update_asset(asset_id: str, body: AssetUpdate, ctx=Depends(get_ctx)):
+    ctx.require("write")
+    # Target, scope, project and kind stay immutable: historical observations keep
+    # their original association. Register another asset for a different target.
+    return await Repository(ctx).update("assets", asset_id, body.model_dump())
 
 
 @router.post("/assessments")

@@ -79,6 +79,17 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await page.getByTestId('field-target').fill('training://local');
   const asset = await saveModal(page, '/assets');
   await expect(page.getByTestId(`assets-row-${asset.id}`)).toBeVisible();
+  await page.getByTestId(`edit-asset-${asset.id}`).click();
+  await page.getByTestId('field-owner').fill('Synthetic asset team');
+  await page.getByTestId('field-criticality').selectOption('high');
+  await page.getByTestId('field-tags').fill('synthetic, training');
+  await saveModal(page, `/assets/${asset.id}`, 'PATCH');
+  await page.getByTestId('field-asset-criticality-filter').selectOption('low');
+  await expect(page.getByTestId(`assets-row-${asset.id}`)).toHaveCount(0);
+  await page.getByTestId('field-asset-criticality-filter').selectOption('high');
+  await expect(page.getByTestId(`assets-row-${asset.id}`)).toContainText('Synthetic asset team');
+  await expect(page.getByTestId(`assets-row-${asset.id}`)).toContainText('training');
+
 
   await page.getByTestId('nav-assessments').click();
   await page.getByTestId('new-assessment').click();

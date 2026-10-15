@@ -60,3 +60,5 @@ A feature becomes **Verified working** only for a stated tested scope. API integ
 ### Continued product management
 
 Project editing, archive/restore and owner labels now persist through an organization-scoped, write-permission-protected PATCH endpoint with audit events. Register search matches name/description/owner among loaded projects; status filtering defaults to active. Existing 1,000-project workspace limit still applies. Ownership labels do not grant permissions. Four focused backend tests pass; extended Mongo/Chromium verification pending.
+
+Asset metadata editing now persists name, owner label, criticality and up to 20 normalized tags. Target/scope/project/kind remain immutable. The asset table supports metadata search, criticality filtering and loaded-row pagination. New backend permission/validation tests pass; Mongo and browser assertions added, CI pending. Dedicated asset history and server-side inventory pagination remain next.
