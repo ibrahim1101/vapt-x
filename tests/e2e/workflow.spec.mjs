@@ -122,6 +122,14 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   const findingId = (await findingRow.getAttribute('data-testid')).replace('findings-row-', '');
   await saveModal(page, `/findings/${findingId}`, 'PATCH');
   await expect(findingRow).toContainText('confirmed');
+  await page.getByTestId(`select-finding-${findingId}`).check();
+  await page.getByTestId('bulk-triage').click();
+  await page.getByTestId('field-status').selectOption('confirmed');
+  await page.getByTestId('bulk-change-owner').check();
+  await page.getByTestId('field-owner').fill('Synthetic finding owner');
+  const bulkResult = await saveModal(page, '/findings/bulk-triage');
+  expect(bulkResult.updated).toBe(1);
+
   await page.getByTestId('field-finding-status-filter').selectOption('resolved');
   await expect(page.getByTestId('findings-page-total')).toContainText('0 matching findings');
   await page.getByTestId('field-finding-status-filter').selectOption('confirmed');

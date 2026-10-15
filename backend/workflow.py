@@ -128,8 +128,9 @@ class ImportInput(BaseModel):
 
 
 class TriageInput(BaseModel):
+    owner: str | None = Field(default=None, max_length=150)
     status: Literal["open", "confirmed", "false_positive", "accepted_risk", "resolved"]
-    notes: str = Field(default="", max_length=5000)
+    notes: str | None = Field(default="", max_length=5000)
 
 
 def valid_due_date(value):
@@ -139,6 +140,13 @@ def valid_due_date(value):
         return date.fromisoformat(value).isoformat()
     except ValueError:
         raise ValueError("Due date must be a calendar date (YYYY-MM-DD)")
+
+
+class BulkTriageInput(BaseModel):
+    finding_ids: list[str] = Field(min_length=1, max_length=100)
+    status: Literal["open", "confirmed", "false_positive", "accepted_risk", "resolved"]
+    notes: str | None = Field(default=None, max_length=5000)
+    owner: str | None = Field(default=None, max_length=150)
 
 
 class TaskInput(BaseModel):
@@ -433,6 +441,28 @@ async def get_job(job_id: str, ctx=Depends(get_ctx)):
     return await Repository(ctx).get("jobs", job_id)
 
 
+@router.post("/findings/bulk-triage")
+async def bulk_triage(body: BulkTriageInput, ctx=Depends(get_ctx)):
+    ctx.require("triage")
+    repo = Repository(ctx)
+    ids = list(dict.fromkeys(body.finding_ids))
+    # Validate the entire selected set before making any change.
+    current = {oid: await repo.get("findings", oid) for oid in ids}
+    results = []
+    for oid in ids:
+        try:
+            await triage(oid, TriageInput(status=body.status,
+                notes=body.notes,
+                owner=body.owner), ctx)
+            results.append({"id": oid, "status": "updated"})
+        except HTTPException as exc:
+            results.append({"id": oid, "status": "failed", "code": exc.status_code, "error": str(exc.detail)})
+        except PyMongoError:
+            results.append({"id": oid, "status": "failed", "code": 503, "error": "Storage unavailable; retry this finding"})
+    return {"results": results, "updated": sum(row["status"] == "updated" for row in results),
+            "failed": sum(row["status"] == "failed" for row in results)}
+
+
 @router.patch("/findings/{finding_id}")
 async def triage(finding_id: str, body: TriageInput, ctx=Depends(get_ctx)):
     ctx.require("triage")
@@ -440,20 +470,27 @@ async def triage(finding_id: str, body: TriageInput, ctx=Depends(get_ctx)):
     current = await repo.get("findings", finding_id)
     previous_status = current.get("status", "open")
     previous_notes = current.get("notes", "")
-    if body.status == previous_status and body.notes == previous_notes:
+    notes = previous_notes if body.notes is None else body.notes
+    previous_owner = current.get("owner", "")
+    owner = previous_owner if body.owner is None else body.owner
+    if body.status == previous_status and notes == previous_notes and owner == previous_owner:
         return current
     timestamp = iso()
     event = {"previous_status": previous_status, "status": body.status,
-             "previous_notes": previous_notes, "notes": body.notes,
+             "previous_notes": previous_notes, "notes": notes,
              "actor_id": ctx.uid, "actor_email": ctx.user.get("email"),
              "created_at": timestamp}
+    if body.owner is not None:
+        event.update(previous_owner=previous_owner, owner=owner)
     # Compare the exact state read, including absent fields on legacy documents.
     # The counter additionally rejects ABA races where status/notes cycle back.
     expected = {key: current[key] if key in current else {"$exists": False}
                 for key in ("status", "notes", "history_total")}
+    if body.owner is not None:
+        expected["owner"] = current["owner"] if "owner" in current else {"$exists": False}
     updated = await db.findings.find_one_and_update(
         repo.query({"_id": finding_id, **expected}),
-        {"$set": {"status": body.status, "notes": body.notes, "updated_at": timestamp},
+        {"$set": {"status": body.status, "notes": notes, "updated_at": timestamp, **({"owner": owner} if body.owner is not None else {})},
          "$push": {"triage_history": {"$each": [event], "$slice": -100}},
          "$inc": {"history_total": 1}},
         return_document=ReturnDocument.AFTER,

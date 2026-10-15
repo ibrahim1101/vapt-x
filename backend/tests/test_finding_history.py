@@ -47,6 +47,18 @@ class FindingHistoryTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(key, args[1]['$set'])
         self.audit.assert_awaited_once_with(self.ctx, 'finding.triaged', 'findings', 'finding-one', {'previous_status': 'open', 'status': 'confirmed'})
 
+    async def test_owner_change_preserves_current_notes_and_provenance(self):
+        self.read.return_value = {**DOCUMENT, 'notes':'Retain latest notes'}
+        await workflow.triage('finding-one', workflow.TriageInput(status='open',notes=None,owner='Team'), self.ctx)
+        query, update = self.write.call_args.args
+        self.assertEqual(query['owner'], {'$exists':False})
+        self.assertEqual(update['$set']['owner'],'Team')
+        self.assertEqual(update['$set']['notes'],'Retain latest notes')
+        event=update['$push']['triage_history']['$each'][0]
+        self.assertEqual(event['previous_owner'],'')
+        self.assertEqual(event['owner'],'Team')
+        self.assertNotIn('verification',update['$set'])
+
     async def test_conflict_does_not_retry_or_audit(self):
         self.write.return_value = None
         with self.assertRaises(HTTPException) as error:

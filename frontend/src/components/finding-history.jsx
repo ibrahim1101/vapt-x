@@ -20,6 +20,7 @@ export function FindingHistory({ findingId }) {
       {[...history.events].reverse().map((event, index) => <article className="section-gap" key={`${event.created_at}-${index}`}>
         <p><Badge type={event.previous_status}>{event.previous_status}</Badge> → <Badge type={event.status}>{event.status}</Badge></p>
         <p className="muted tiny">{event.actor_email || event.actor_id} · {new Date(event.created_at).toLocaleString()}</p>
+        {event.owner !== undefined && event.owner !== event.previous_owner && <p className="tiny">Owner: {event.previous_owner||'Unassigned'} → {event.owner||'Unassigned'}</p>}
         {event.notes !== event.previous_notes && <><p className="tiny">Updated analyst notes</p><pre>{event.notes || 'Notes cleared'}</pre></>}
       </article>)}
     </>}

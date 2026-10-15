@@ -200,6 +200,12 @@ class PersistenceTests(unittest.TestCase):
                     history = client.get('/api/assessments/' + retest['id'] + '/history').json()
                     assert any(event['action'] == 'assessment.cancelled' for event in history['events'])
                     assert client.get('/api/assessments', params={'project_id':project['id'], 'status':'cancelled'}).json()['total'] == 1
+                    response = post('findings/bulk-triage', {'finding_ids':[finding['id'],finding['id']],
+                        'status':'confirmed','owner':'Synthetic finding team'})
+                    assert response['updated'] == 1 and response['failed'] == 0
+                    saved_finding = mongo[database].findings.find_one({'_id':finding['id']})
+                    assert saved_finding['owner'] == 'Synthetic finding team'
+                    assert saved_finding['verification'] == 'imported-unverified'
                     # Navigation must reach findings beyond the workspace's 1,000-row limit.
                     mongo[database].findings.insert_many([{
                         '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],
