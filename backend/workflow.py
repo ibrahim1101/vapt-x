@@ -1,10 +1,11 @@
 import asyncio
+import re
 import os
 import shutil
 from importlib.util import find_spec
 from datetime import datetime, timezone
 from typing import Literal
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, field_validator
 from core import get_ctx, iso, audit, db, DomainDocument
 from pymongo import ReturnDocument
@@ -157,6 +158,38 @@ async def workspace(project_id: str | None = None, ctx=Depends(get_ctx)):
     data["audit"] = await repo.list("audit_events", limit=100)
     data["role"] = ctx.role
     return data
+
+
+@router.get("/findings")
+async def list_findings(
+    project_id: str | None = None,
+    assessment_id: str | None = None,
+    search: str = Query(default="", max_length=120),
+    severity: Literal["critical", "high", "medium", "low", "info"] | None = None,
+    status: Literal["open", "confirmed", "false_positive", "accepted_risk", "resolved"] | None = None,
+    scanner: str | None = Query(default=None, max_length=50),
+    offset: int = Query(default=0, ge=0, le=1_000_000),
+    limit: int = Query(default=25, ge=1, le=100),
+    ctx=Depends(get_ctx),
+):
+    ctx.require("read")
+    repo = Repository(ctx)
+    filters = {}
+    if project_id:
+        await repo.get("projects", project_id)
+        filters["project_id"] = project_id
+    if assessment_id:
+        assessment = await repo.get("assessments", assessment_id)
+        if project_id and assessment["project_id"] != project_id:
+            raise HTTPException(404, "Resource not found")
+        filters["assessment_id"] = assessment_id
+    for key, value in (("severity", severity), ("status", status), ("scanner", scanner)):
+        if value:
+            filters[key] = value
+    if search.strip():
+        expression = {"$regex": re.escape(search.strip()), "$options": "i"}
+        filters["$or"] = [{field: expression} for field in ("title", "target", "description")]
+    return await repo.page("findings", filters, offset=offset, limit=limit)
 
 
 @router.post("/projects")

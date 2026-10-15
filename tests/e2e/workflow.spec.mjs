@@ -112,6 +112,11 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   const findingId = (await findingRow.getAttribute('data-testid')).replace('findings-row-', '');
   await saveModal(page, `/findings/${findingId}`, 'PATCH');
   await expect(findingRow).toContainText('confirmed');
+  await page.getByTestId('field-finding-status-filter').selectOption('resolved');
+  await expect(page.getByTestId('findings-page-total')).toContainText('0 matching findings');
+  await page.getByTestId('field-finding-status-filter').selectOption('confirmed');
+  await expect(findingRow).toContainText('confirmed');
+
 
   await findingRow.click();
   await page.getByTestId('finding-evidence').click();

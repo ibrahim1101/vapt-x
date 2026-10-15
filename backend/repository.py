@@ -14,6 +14,15 @@ class Repository:
         docs = await db[collection].find(self.query(filters), {"triage_history": 0}).sort("created_at", -1).limit(limit).to_list(limit)
         return [DomainDocument.from_mongo(d).model_dump() for d in docs]
 
+    async def page(self, collection, filters=None, offset=0, limit=25):
+        query = self.query(filters)
+        total = await db[collection].count_documents(query)
+        docs = await db[collection].find(query, {"triage_history": 0}).sort(
+            [("created_at", -1), ("_id", -1)]).skip(offset).limit(limit).to_list(limit)
+        return {"items": [DomainDocument.from_mongo(d).model_dump() for d in docs],
+                "total": total, "offset": offset, "limit": limit,
+                "has_more": offset + len(docs) < total}
+
     async def complete_list(self, collection, filters=None, max_rows=5000):
         """Return a bounded complete set or fail; never silently truncate reports."""
         rows = await self.list(collection, filters, limit=max_rows + 1)

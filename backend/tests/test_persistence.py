@@ -172,6 +172,22 @@ class PersistenceTests(unittest.TestCase):
                         mongo[database].sessions.insert_one({'_id': uuid.uuid4().hex, 'user_id': user['id'], 'revoked': False, 'created_at': now.isoformat(), 'expires_at': (now+timedelta(days=1)).isoformat()})
                     assert post('auth/sessions/revoke-others', {})['revoked_count'] == 2
                     assert client.get('/api/auth/me').status_code == 200
+                    # Navigation must reach findings beyond the workspace's 1,000-row limit.
+                    mongo[database].findings.insert_many([{
+                        '_id': 'page-' + str(i).zfill(5), 'org_id': org['id'], 'created_by': user['id'],
+                        'created_at': now.isoformat(), 'project_id': project['id'],
+                        'assessment_id': assessment['id'], 'title': 'Pagination fixture literal .*',
+                        'target': 'training://local', 'severity': 'high', 'status': 'open',
+                        'scanner': 'semgrep', 'verification': 'imported-unverified'} for i in range(1005)])
+                    page_params = {'project_id': project['id'], 'assessment_id': assessment['id'],
+                        'search': 'literal .*', 'severity': 'high', 'status': 'open', 'scanner': 'semgrep',
+                        'offset': 1000, 'limit': 25}
+                    response = client.get('/api/findings', params=page_params)
+                    assert response.status_code == 200, response.text
+                    page = response.json()
+                    assert page['total'] == 1005 and len(page['items']) == 5 and not page['has_more']
+                    assert all(row['org_id'] == org['id'] for row in page['items'])
+                    assert client.get('/api/findings', params={'limit': 101}).status_code == 422
                     # A second organization cannot retrieve or mutate any first-organization resource.
                     response = client.post('/api/auth/register', headers=origin, json={'email': 'bob@example.com', 'password': 'integration-password'})
                     assert response.status_code == 200, response.text
@@ -188,6 +204,8 @@ class PersistenceTests(unittest.TestCase):
                     assert response.status_code == 404
                     response = client.patch('/api/assets/' + asset['id'], headers=headers(), json={'name': 'Foreign edit'})
                     assert response.status_code == 404
+                    assert client.get('/api/findings', params={'project_id': project['id']}).status_code == 404
+                    assert client.get('/api/findings').json()['total'] == 0
                     bob_sessions = client.get('/api/auth/sessions').json()['sessions']
                     bob_current = next(session['id'] for session in bob_sessions if session['current'])
                     assert post('auth/sessions/' + bob_current + '/revoke', {})['current'] is True
