@@ -34,3 +34,10 @@ test('removal stays available when provider is disabled and requires password st
 test('result markers contain no identity credentials and only read fragments',()=>{
  window.history.replaceState(null,'','/?oidc_result=ignored#oidc_result=pending');expect(oidcResultFromLocation()).toBe('pending');
 });
+
+test('back cancels browser-owned proof before leaving even if the provider is disabled',async()=>{
+ const back=jest.fn();api.post.mockResolvedValue({data:{ok:true}});
+ await act(async()=>root.render(<OIDCResult result="failed" onBack={back}/>));
+ await act(async()=>container.querySelector('[data-testid="oidc-back"]').click());
+ expect(api.post).toHaveBeenCalledWith('/auth/oidc/cancel');expect(back).toHaveBeenCalledTimes(1);
+});

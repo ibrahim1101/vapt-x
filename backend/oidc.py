@@ -14,7 +14,6 @@ import jwt
 from fastapi import APIRouter,Depends,HTTPException,Request,Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel,Field
-from pymongo.errors import DuplicateKeyError
 from core import db,now,iso,clean,new_id,sha256_hex,get_current_user
 from auth import establish_session,local_cookie_mode,charge_auth_attempt,account_event,renew_credentials
 from mfa import Reauthenticate,reauthenticate,consume,version_query
@@ -189,6 +188,17 @@ async def pending(request):
     user=await db.users.find_one({'_id':item['user_id'],'disabled':{'$ne':True},'oidc_identity.id':item['identity_id']})
     if not user or user.get('credential_version',0)!=item['credential_version']:raise HTTPException(401,'Account credentials changed. Start again.')
     return item,user
+
+@router.post('/cancel')
+async def cancel(request:Request,response:Response):
+    # Browser-owned cancellation is usable even after the operator disables OIDC.
+    browser=request.cookies.get('oidc_browser','');challenge=request.cookies.get('oidc_pending','')
+    if 32<=len(browser)<=128:
+        await db.oidc_flows.update_many({'browser_hash':digest(browser),'used':False},{'$set':{'used':True}})
+    if 32<=len(challenge)<=128:
+        await db.oidc_challenges.update_one({'_id':digest(challenge),'used':False},{'$set':{'used':True}})
+    clear_cookie(response,'oidc_browser');clear_cookie(response,'oidc_pending')
+    return {'ok':True}
 
 @router.get('/pending')
 async def pending_status(request:Request):

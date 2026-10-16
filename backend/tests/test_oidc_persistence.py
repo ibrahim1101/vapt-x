@@ -12,7 +12,7 @@ class OIDCPersistenceTests(unittest.TestCase):
    from cryptography.hazmat.primitives.asymmetric import rsa
    from pymongo import MongoClient
    from fastapi.testclient import TestClient
-   import jwt
+   import jwt,httpx
    database='vaptx_oidc_'+uuid.uuid4().hex;encryption=Fernet.generate_key().decode()
    os.environ.update(MONGO_URL=os.environ['MONGO_TEST_URL'],DB_NAME=database,JWT_SECRET='synthetic-oidc-'*5,
     ADMIN_EMAIL='owner@example.com',ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
@@ -56,6 +56,13 @@ class OIDCPersistenceTests(unittest.TestCase):
      assert 'nonce' not in str(stored) and stored['mfa_enabled'] is True
      assert client.get('/api/auth/me',headers={'cookie':'access_token='+old}).status_code==401
      assert callback(target).headers['location'].endswith('failed')
+     owner_cookies=httpx.Cookies(client.cookies)
+     second=client.post('/api/auth/register',headers=origin,json={'email':'second@example.com','password':'synthetic-password'}).json()
+     collision=begin('/api/auth/oidc/link/start',{'current_password':'synthetic-password'})
+     assert callback(collision).headers['location'].endswith('failed')
+     assert mongo[database].users.find_one({'_id':second['id']}).get('oidc_identity') is None
+     assert mongo[database].users.find_one({'_id':uid})['oidc_identity']['subject']==subject
+     client.cookies.clear();client.cookies.update(owner_cookies)
      client.post('/api/auth/logout',headers=headers());client.cookies.clear()
      target=begin();pending=callback(target);assert pending.headers['location'].endswith('pending'),pending.headers
      assert client.get('/api/auth/me').status_code==401
@@ -92,6 +99,9 @@ class OIDCPersistenceTests(unittest.TestCase):
       assert removed.status_code==200,removed.text
      assert mongo[database].users.find_one({'_id':uid}).get('oidc_identity') is None
      assert client.get('/api/auth/me',headers={'cookie':'access_token='+old}).status_code==401
+     target=begin()
+     assert client.post('/api/auth/oidc/cancel',headers=headers()).status_code==200
+     assert callback(target).headers['location'].endswith('failed')
      target=begin();assert callback(target).headers['location'].endswith('failed')
      assert mongo[database].users.count_documents({'email':'linked@example.com'})==1
      assert mongo[database].account_events.count_documents({'user_id':uid,'action':'identity.linked'})==1

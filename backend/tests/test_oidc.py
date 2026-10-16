@@ -132,3 +132,12 @@ class RouteTests(unittest.TestCase):
    self.assertEqual(client.post('/api/auth/oidc/unlink',headers={'origin':'http://localhost:3000'},json={}).status_code,403)
    response=client.get('/api/auth/oidc/callback?state=private&code=private',follow_redirects=False)
    self.assertTrue(response.headers['location'].endswith('failed'));db.oidc_flows.find_one_and_update.assert_not_called()
+
+class CancellationTests(unittest.IsolatedAsyncioTestCase):
+ async def test_cancel_invalidates_only_browser_owned_flow_and_challenge_when_disabled(self):
+  with patch.dict('os.environ',{'OIDC_ENABLED':'0'}),patch.object(oidc,'db') as db:
+   db.oidc_flows.update_many=AsyncMock();db.oidc_challenges.update_one=AsyncMock();response=Response()
+   await oidc.cancel(request(cookies='oidc_browser='+'b'*43+'; oidc_pending='+'p'*43),response)
+   db.oidc_flows.update_many.assert_awaited_once_with({'browser_hash':oidc.digest('b'*43),'used':False},{'$set':{'used':True}})
+   db.oidc_challenges.update_one.assert_awaited_once_with({'_id':oidc.digest('p'*43),'used':False},{'$set':{'used':True}})
+   self.assertEqual(len(response.headers.getlist('set-cookie')),2)
