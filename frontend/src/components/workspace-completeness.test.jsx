@@ -11,7 +11,7 @@ test('identifies incomplete collections and explains filter limitations', () => 
   const markup = renderToStaticMarkup(<WorkspaceCompletenessNotice collections={['findings', 'jobs']} />);
   expect(markup).toContain('role="status"');
   expect(markup).toContain('findings, scan jobs');
-  expect(markup).toContain('project filters reflect only the loaded records');
+  expect(markup).toContain('Dedicated registers search and page through complete server collections');
 });
 
 
