@@ -16,6 +16,7 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 | Assets | Metadata/criticality/tags, bulk registration receipts, server pagination/search/activity | Owner labels confer no permission; target/scope immutable |
 | Authorization | Exact targets, explicit reference/time window/scanner profiles, scope withdrawal, fresh destination checks | No authorization attachment/approval workflow |
 | Assessments | Creation, pagination/search, cancellation/retry/history, coverage-aware retest comparison | Process-local check ownership; restart marks interrupted jobs; no scheduler/durable assessment queue |
+| Scan jobs | Complete server pagination, literal ID/engine search, status/source filters, scoped asset names and independently loaded execution records | Records reflect stored execution; no durable scheduling or automatic polling |
 | Checks | Bounded HTTP headers/cookies/TLS/security.txt/DNS and constrained Nmap; managed training target | Non-exploitative and intentionally limited; no exhaustive scanner or production sandbox |
 | Finding imports | Nmap, Nuclei, Semgrep, Trivy, ZAP, Gitleaks and Checkov with synthetic fixtures | Import assertions remain unverified; not every upstream schema is supported |
 | API/SBOM inventory | OpenAPI and CycloneDX/SPDX JSON import, deduplication and asset inventory view | Inventory only; no endpoint execution, external references or dependency completeness guarantee |
@@ -42,4 +43,4 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 
 Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
 
-Remediation and audit registers now query complete matching collections, with live 25-row pages. Pagination offsets remain capped at 1,000,000. Other selectors/registers can still use bounded workspace previews.
+Scan-job, remediation and audit registers now query complete matching collections, with live 25-row pages. Pagination offsets remain capped at 1,000,000. Other selectors/registers can still use bounded workspace previews.

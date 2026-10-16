@@ -9,13 +9,14 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 - Organization role/membership lifecycle, anti-orphan guards, scoped hash-only tokens and membership-lifetime invalidation.
 - Project edits/archive/templates/navigation; asset metadata/bulk registration/navigation/history; assessment cancellation/retry/history/navigation.
 - Finding filters/pagination, bulk triage/owner/history, comments, organization SLA policy, remediation edits and coverage-aware retests.
+- Complete scan-job pagination/search/status/source filters and independently loaded execution records.
 - Scanner/import safety, secret/IaC imports, API/SBOM inventory, cached CVE intelligence and private exports/evidence integrity.
 - Versioned PDF templates/preview/branding/custom sections/source snapshots; optional multi-provider AI with bounded redaction/usage.
 - Complete overview counts, dedicated complete remediation/audit navigation and encrypted opt-in signed webhook outbox with retries, rotation/removal and delivery history.
 
 ## Next implementation order
 
-1. Finish complete server navigation for scan jobs, evidence, scope, report and membership registers; retain explicit size/coverage limits in report operations and selectors.
+1. Finish complete server navigation for evidence, scope, report and membership registers; retain explicit size/coverage limits in report operations and selectors.
 2. Complete account reset/email verification and invitation lifecycle with explicit delivery configuration; then optional OIDC. Preserve MFA and token invalidation on recovery.
 3. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
 4. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.

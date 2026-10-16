@@ -440,6 +440,7 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await expect(page.getByTestId('workspace-modal')).toBeHidden();
   await page.getByTestId('nav-scans').click();
   await page.getByTestId('field-job-source').selectOption('import');
+  await page.getByTestId('field-job-search').fill('semgrep');
   await expect(page.getByTestId('jobs-total')).not.toContainText('0 matching jobs');
   await page.getByTestId(/^job-details-/).first().click();
   await expect(page.getByTestId('scan-console')).toContainText('Imported scanner-authored output');
