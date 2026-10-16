@@ -17,7 +17,7 @@ async def list_events(search:str=Query(default='',max_length=120),action:str=Que
     if from_date and to_date and from_date>to_date:raise HTTPException(422,'Start date must not follow end date')
     if to_date==date.max:raise HTTPException(422,'End date is outside the supported range')
     query={}
-    if search.strip():query['$or']=[{key:{'$regex':re.escape(search.strip()),'$options':'i'}} for key in ('action','actor_email','resource_type','resource_id')]
+    if search.strip():query['$or']=[{key:{'$regex':re.escape(search.strip()),'$options':'i'}} for key in ('action','actor_email','actor_id','resource_type','resource_id')]
     if action.strip():query['action']=action.strip()
     if actor.strip():query['actor_email']={'$regex':re.escape(actor.strip()),'$options':'i'}
     if resource_type.strip():query['resource_type']=resource_type.strip()
