@@ -233,6 +233,16 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   const task = await saveModal(page, '/tasks');
   await page.getByTestId('nav-remediation').click();
   await expect(page.getByTestId(`task-${task.id}`)).toContainText('Synthetic CI team');
+  await page.getByTestId('field-task-search').fill('synthetic CI remediation');
+  await expect(page.getByTestId(`task-${task.id}`)).toBeVisible();
+  await page.getByTestId('field-task-assignee-filter').fill('Synthetic CI team');
+  await expect(page.getByTestId('tasks-count-todo')).toHaveText('1');
+  await page.getByTestId('field-task-search').fill('No matching synthetic task');
+  await expect(page.getByTestId(`task-${task.id}`)).toHaveCount(0);
+  await page.getByTestId('field-task-search').fill('');
+  await page.getByTestId('field-task-assignee-filter').fill('');
+  await expect(page.getByTestId(`task-${task.id}`)).toBeVisible();
+
   await page.getByTestId(`edit-task-${task.id}`).click();
   await page.getByTestId('field-assignee').fill('Synthetic remediation owner');
   await page.getByTestId('field-status').selectOption('in_progress');

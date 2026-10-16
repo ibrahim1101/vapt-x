@@ -351,6 +351,18 @@ class PersistenceTests(unittest.TestCase):
                     assert summary['open_findings'] == mongo[database].findings.count_documents({'org_id':org['id'],'project_id':project['id'],'status':{'$nin':['resolved','false_positive']}})
                     assert client.get('/api/analytics/summary',params={'project_id':'foreign'}).status_code == 404
 
+                    mongo[database].tasks.insert_many([{'_id':'task-page-'+str(i), 'org_id':org['id'], 'created_by':user['id'],
+                        'created_at':now.isoformat(),'project_id':project['id'],'finding_id':finding['id'],
+                        'title':'Task navigation literal .*','assignee':'Pagination team','status':'todo','progress':0,'due_date':'2000-01-01'} for i in range(1005)])
+                    mongo[database].tasks.insert_many([{'_id':'task-invalid-'+str(i),'org_id':org['id'],'created_by':user['id'],
+                        'created_at':now.isoformat(),'project_id':project['id'],'finding_id':finding['id'],
+                        'title':'Task navigation literal .*','assignee':'Pagination team','status':'todo','due_date':value} for i,value in enumerate(['1999-02-30','',None])])
+                    task_page=client.get('/api/tasks',params={'project_id':project['id'],'search':'literal .*','assignee':'Pagination','status':'todo','overdue':'true','offset':1000}).json()
+                    assert task_page['total']==1005 and len(task_page['items'])==5 and not task_page['has_more'],task_page
+                    assert all(row['overdue'] for row in task_page['items'])
+                    response=client.patch('/api/tasks/'+task_page['items'][0]['id'],headers=headers(),json={'status':'done'})
+                    assert response.status_code==200,response.text
+                    assert client.get('/api/tasks',params={'project_id':project['id'],'search':'literal .*','status':'todo','overdue':'true'}).json()['total']==1004
                     mongo[database].projects.insert_many([{'_id':'project-page-'+str(i), 'org_id':org['id'],
                         'created_by':user['id'],'created_at':(now-timedelta(days=1)).isoformat(),
                         'name':'Project navigation fixture','status':'active','description':'','owner':'Pagination team'} for i in range(1005)])
@@ -378,6 +390,8 @@ class PersistenceTests(unittest.TestCase):
                     assert response.status_code == 404
                     assert client.get('/api/findings', params={'project_id': project['id']}).status_code == 404
                     assert client.get('/api/findings').json()['total'] == 0
+                    assert client.get('/api/tasks',params={'project_id':project['id']}).status_code==404
+                    assert client.get('/api/tasks').json()['total']==0
                     assert client.get('/api/analytics/summary').json()['findings'] == 0
                     assert client.get('/api/assets/' + asset['id'] + '/history').status_code == 404
                     assert client.get('/api/assets', params={'project_id': project['id']}).status_code == 404

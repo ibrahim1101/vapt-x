@@ -547,6 +547,33 @@ async def finding_history(finding_id: str, ctx=Depends(get_ctx)):
     return {"events": events, "has_more": total > len(events), "total": total}
 
 
+@router.get("/tasks")
+async def list_tasks(project_id:str|None=None,search:str=Query(default="",max_length=120),
+    assignee:str=Query(default="",max_length=150),status:Literal["todo","in_progress","done"]|None=None,
+    overdue:bool=False,offset:int=Query(default=0,ge=0,le=1_000_000),
+    limit:int=Query(default=25,ge=1,le=100),ctx=Depends(get_ctx)):
+    ctx.require("read")
+    repo=Repository(ctx)
+    filters={}
+    if project_id:
+        await repo.get("projects",project_id)
+        filters["project_id"]=project_id
+    if search.strip():filters["$or"]=[{key:{"$regex":re.escape(search.strip()),"$options":"i"}} for key in ("title","assignee")]
+    if assignee.strip():filters["assignee"]={"$regex":re.escape(assignee.strip()),"$options":"i"}
+    if status:filters["status"]=status
+    today=datetime.now(timezone.utc).date()
+    if overdue:
+        parsed={"$dateFromString":{"dateString":"$due_date","format":"%Y-%m-%d","onError":None,"onNull":None}}
+        midnight=datetime(today.year,today.month,today.day,tzinfo=timezone.utc)
+        filters["$and"]=[{"status":{"$ne":"done"}},{"$expr":{"$and":[{"$ne":[parsed,None]},{"$lt":[parsed,midnight]}]}}]
+    result=await repo.page("tasks",filters,offset=offset,limit=limit)
+    for task in result["items"]:
+        try:due=date.fromisoformat(task.get("due_date") or "")
+        except (ValueError,TypeError):due=None
+        task["overdue"]=bool(due and due<today and task.get("status")!="done")
+    return {**result,"as_of_date":today.isoformat(),"notice":"Overdue means an unfinished task with a valid due date before today in UTC. Counts cover all matching stored tasks; pages may change as tasks are updated."}
+
+
 @router.post("/tasks")
 async def create_task(body: TaskInput, ctx=Depends(get_ctx)):
     ctx.require("remediate")
