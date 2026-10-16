@@ -88,3 +88,20 @@ class SessionRouteTests(unittest.TestCase):
             self.assertEqual(client.post(path, headers={
                 'origin': 'http://localhost:3000', 'cookie': 'csrf=test', 'x-csrf-token': 'test',
             }).status_code, 401)
+
+class SessionExpiryAuthenticationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_fresh_access_jwt_cannot_outlive_stored_session(self):
+        import core
+        from starlette.requests import Request
+        from test_auth_rotation import Sessions
+        for expiry in ('2025-12-31T23:59:59+00:00',NOW,None,'2026-01-02T00:00:00+00:00'):
+            document={'_id':'session','user_id':'alice','revoked':False}
+            if expiry is not None:document['expires_at']=expiry
+            sessions=Sessions(document)
+            request=Request({'type':'http','path':'/api/auth/me','headers':[(b'cookie',f'access_token={core.create_access_token("alice","session")}'.encode())]})
+            with self.subTest(expiry=expiry),patch.object(core,'db') as db,patch.object(core,'iso',return_value=NOW):
+                db.sessions=sessions;db.users.find_one=AsyncMock(return_value={'_id':'alice','email':'alice@example.com'})
+                if expiry is None or expiry<=NOW:
+                    with self.assertRaises(HTTPException) as rejected:await core.get_current_user(request)
+                    self.assertEqual(rejected.exception.status_code,401);db.users.find_one.assert_not_awaited()
+                else:self.assertEqual((await core.get_current_user(request))['id'],'alice')

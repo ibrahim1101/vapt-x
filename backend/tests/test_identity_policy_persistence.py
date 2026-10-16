@@ -64,6 +64,14 @@ class IdentityPolicyPersistenceTests(unittest.TestCase):
                         assert denied.status_code==403,denied.text
                         assert mongo[database].users.count_documents({'email':'blocked@example.com'})==0
                         assert client.post('/api/auth/login',headers=origin,json={'email':'new@example.com','password':'synthetic-password'}).status_code==200
+                    # A fresh access JWT must not survive expiry of its stored session.
+                    from core import decode_token
+                    sid=decode_token(client.cookies.get('access_token'))['sid']
+                    mongo[database].sessions.update_one({'_id':sid},{'$set':{'expires_at':'2000-01-01T00:00:00+00:00'}})
+                    assert client.get('/api/auth/me').status_code==401
+                    assert client.post('/api/auth/refresh',headers=headers()).status_code==401
+                    mongo[database].sessions.update_one({'_id':sid},{'$unset':{'expires_at':''}})
+                    assert client.get('/api/auth/me').status_code==401
             finally:
                 mongo.drop_database(database);mongo.close()
         ''')

@@ -138,9 +138,9 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(401, "Invalid token")
     if payload.get("type") != "access" or not payload.get("sub"):
         raise HTTPException(401, "Invalid token type")
-    sess = await db.sessions.find_one({"_id": payload.get("sid"), "user_id": payload["sub"], "revoked": False})
+    sess = await db.sessions.find_one({"_id": payload.get("sid"), "user_id": payload["sub"], "revoked": False, "expires_at": {"$gt": iso()}})
     if not sess:
-        raise HTTPException(401, "Session revoked")
+        raise HTTPException(401, "Session revoked or expired")
     user = await db.users.find_one({"_id": payload["sub"]})
     if not user or user.get("disabled") or user.get("credential_version", 0) != sess.get("credential_version", 0):
         raise HTTPException(401, "Session credentials changed")
