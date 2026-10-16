@@ -22,3 +22,5 @@ Account disable and membership removal block subsequent authenticated operations
 No production deployment, merge or release has been performed. Use synthetic data for demonstrations and retain the supported single-worker topology. Readiness requires evidence for the remaining operational gates, not merely a successful build.
 
 Latest code acceptance includes complete evidence/report/scope/member/scan-job/task/audit navigation beyond 1,000 records, UTC overdue/date behavior, independent execution records, event detail inspection and explicit two-organization browser audit isolation. All four workflows passed for `e8b2024b95ba9308b2df0867ce58325dd532c926`; published CI links are in the feature matrix.
+
+Operational increment: a guarded disposable MongoDB restore drill is implemented on the separate restore-verification branch. Runtime verification is pending; production backup policy, secure offsite key custody, point-in-time consistency and restore objectives remain release gates. See [BACKUP_RESTORE.md](BACKUP_RESTORE.md).

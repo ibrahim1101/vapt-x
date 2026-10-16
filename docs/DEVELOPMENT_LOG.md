@@ -219,3 +219,13 @@ Synthetic Mongo acceptance races two reset completions, verifies a single succes
 Registry HTTP 502 responses interrupted two browser image builds before tests began. The frontend image and frontend CI now share a maximum-three-attempt dependency install wrapper. Every attempt retains frozen-lockfile and ignore-scripts controls, and persistent failure exits unsuccessfully. Synthetic shell checks verify second-attempt success and failure after exactly three attempts.
 
 Final code `e8b2024b95ba9308b2df0867ce58325dd532c926` passed all gates: backend 38893793164 (200 tests on Python 3.11/3.12 with Mongo), frontend 38893793168 (68 tests, 25 suites and production build), Docker 38893793153 and real Nginx Chromium 38893793163. Local full backend checkpoint: 192 passed and six Mongo-dependent tests skipped; final focused recovery tests: 10 passed. Dependency, syntax and diff checks passed. Email verification, invitation lifecycle and other roadmap/operational gates remain. No merge, release, production deployment, live external scan/provider call or notification activation occurred.
+
+## 2026-10-16 — isolated restore verification workstream
+
+Reconciled this workspace against remote `16edf2dfa7acbe49f7a2f8edeff57b58e99ba2da` rather than applying stale account/navigation drafts. Created the separate `dev/vapt-x-restore-verification` branch for operations work while the primary feature PR continues.
+
+Added a CI-only MongoDB 7 archive/gzip/remap restore drill. Only generated, marked synthetic databases are created or cleaned up. The drill verifies finding provenance, evidence bytes/SHA-256, restored unique indexes, and recovery of Fernet-encrypted synthetic MFA/webhook material using a previous key in a new key ring. No application `.env`, customer archive, database-name argument, live integration or production restore is accepted. Archive/key files are temporary and never uploaded.
+
+Initial local guard regressions: four passed using `../vapt-x-current/.venv/bin/python -m unittest discover -s scripts -p test_verify_restore.py -v`. Real dump/restore remains pending CI. See BACKUP_RESTORE.md for the precise boundary and remaining operational requirements.
+
+Independent review added cleanup resilience: a lookup/drop failure for one owned namespace no longer prevents attempting the other. Five guard tests now pass; runtime remains pending.
