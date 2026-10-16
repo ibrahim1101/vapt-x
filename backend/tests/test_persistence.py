@@ -370,6 +370,15 @@ class PersistenceTests(unittest.TestCase):
                     assert audit_page['total']==1005 and len(audit_page['items'])==5 and not audit_page['has_more'],audit_page
                     assert all(row['details']['reason']=='Synthetic fixture' for row in audit_page['items'])
                     assert client.get('/api/audit-events',params={'from_date':'2020-01-02','to_date':'2020-01-01'}).status_code==422
+                    mongo[database].jobs.insert_many([{'_id':'job-page-'+str(i),'org_id':org['id'],'created_by':user['id'],
+                        'created_at':'2020-01-01T12:00:00+00:00','project_id':project['id'],'assessment_id':assessment['id'],
+                        'asset_id':asset['id'],'scanner':'nmap','source':'import','status':'completed','finding_count':0,
+                        'logs':['Historical execution fixture'],'raw_output':'PRIVATE_RAW_FIXTURE','checks':[]} for i in range(1005)])
+                    jobs_page=client.get('/api/jobs',params={'project_id':project['id'],'search':'job-page-','source':'import','status':'completed','offset':1000}).json()
+                    assert jobs_page['total']==1005 and len(jobs_page['items'])==5 and not jobs_page['has_more'],jobs_page
+                    assert all(row['asset_name']==asset['name'] and 'raw_output' not in row and 'logs' not in row for row in jobs_page['items'])
+                    assert client.get('/api/jobs/job-page-0').json()['logs']==['Historical execution fixture']
+                    assert client.get('/api/jobs',params={'source':'invalid'}).status_code==422
                     mongo[database].projects.insert_many([{'_id':'project-page-'+str(i), 'org_id':org['id'],
                         'created_by':user['id'],'created_at':(now-timedelta(days=1)).isoformat(),
                         'name':'Project navigation fixture','status':'active','description':'','owner':'Pagination team'} for i in range(1005)])
@@ -399,6 +408,9 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/findings').json()['total'] == 0
                     assert client.get('/api/tasks',params={'project_id':project['id']}).status_code==404
                     assert client.get('/api/tasks').json()['total']==0
+                    assert client.get('/api/jobs').json()['total']==0
+                    assert client.get('/api/jobs',params={'project_id':project['id']}).status_code==404
+                    assert client.get('/api/jobs/job-page-0').status_code==404
                     assert client.get('/api/audit-events',params={'search':'literal .*'}).json()['total']==0
                     assert client.get('/api/analytics/summary').json()['findings'] == 0
                     assert client.get('/api/assets/' + asset['id'] + '/history').status_code == 404

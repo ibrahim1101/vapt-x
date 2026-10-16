@@ -14,10 +14,10 @@ class Repository:
         docs = await db[collection].find(self.query(filters), {"triage_history": 0}).sort("created_at", -1).limit(limit).to_list(limit)
         return [DomainDocument.from_mongo(d).model_dump() for d in docs]
 
-    async def page(self, collection, filters=None, offset=0, limit=25):
+    async def page(self, collection, filters=None, offset=0, limit=25, projection=None):
         query = self.query(filters)
         total = await db[collection].count_documents(query)
-        docs = await db[collection].find(query, {"triage_history": 0}).sort(
+        docs = await db[collection].find(query, projection if projection is not None else {"triage_history": 0}).sort(
             [("created_at", -1), ("_id", -1)]).skip(offset).limit(limit).to_list(limit)
         return {"items": [DomainDocument.from_mongo(d).model_dump() for d in docs],
                 "total": total, "offset": offset, "limit": limit,

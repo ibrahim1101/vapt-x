@@ -471,6 +471,32 @@ async def import_scan(body: ImportInput, ctx=Depends(get_ctx)):
         return await repo.update("jobs", job["id"], {"finding_count": count}, log=False)
 
 
+@router.get("/jobs")
+async def list_jobs(project_id: str | None = None, search: str = Query(default="", max_length=120),
+    status: Literal["queued", "running", "completed", "failed", "cancelled", "interrupted", "cancelling"] | None = None,
+    scanner: str = Query(default="", max_length=50), source: Literal["execution", "import"] | None = None,
+    offset: int = Query(default=0, ge=0, le=1_000_000), limit: int = Query(default=25, ge=1, le=100), ctx=Depends(get_ctx)):
+    ctx.require("read")
+    repo = Repository(ctx)
+    filters = {}
+    if project_id:
+        await repo.get("projects", project_id)
+        filters["project_id"] = project_id
+    if search.strip():
+        filters["$or"] = [{key: {"$regex": re.escape(search.strip()), "$options": "i"}}
+                          for key in ("_id", "scanner", "asset_id", "assessment_id")]
+    if status: filters["status"] = status
+    if scanner.strip(): filters["scanner"] = scanner.strip()
+    if source: filters["source"] = source
+    allowed = ("project_id", "assessment_id", "asset_id", "scanner", "source", "status", "finding_count", "created_at", "finished_at")
+    page = await repo.page("jobs", filters, offset=offset, limit=limit, projection={key: 1 for key in (*allowed, "org_id", "created_by")})
+    asset_ids = list({row.get("asset_id") for row in page["items"] if row.get("asset_id")})
+    assets = await db.assets.find(repo.query({"_id": {"$in": asset_ids}}), {"name": 1}).to_list(limit)
+    names = {row["_id"]: row.get("name") for row in assets}
+    page["items"] = [{"id": row["id"], **{key: row.get(key) for key in allowed}, "asset_name": names.get(row.get("asset_id"))} for row in page["items"]]
+    return page
+
+
 @router.get("/jobs/{job_id}")
 async def get_job(job_id: str, ctx=Depends(get_ctx)):
     ctx.require("read")
