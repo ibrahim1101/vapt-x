@@ -426,6 +426,11 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await page.getByTestId('refresh-account-history').click();
   expect((await historyLoaded).ok()).toBeTruthy();
   await expect(page.getByTestId('account-security-events')).toContainText('mfa disabled');
+  await page.getByTestId('organization-select').selectOption({label:'Synthetic isolated organization'});
+  await page.getByTestId('nav-audit-trail').click();
+  await page.getByTestId('field-audit-action').fill('scope.revoked');
+  await expect(page.getByTestId('audit-total')).toContainText('0 matching events');
+  await page.getByTestId('organization-select').selectOption({label:'Synthetic CI Organization'});
   await page.getByTestId('nav-audit-trail').click();
   await page.getByTestId('field-audit-action').fill('scope.revoked');
   await expect(page.getByTestId('audit-total')).toContainText('1 matching events');
