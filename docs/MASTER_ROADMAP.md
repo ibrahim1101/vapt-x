@@ -1,6 +1,6 @@
 # VAPT-X engineering roadmap
 
-Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `2a4f6d2` passed backend (219 tests with Mongo), frontend (84 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `8bb58f2` passed backend (225 tests with Mongo), frontend (90 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Completed increments
 
@@ -8,6 +8,7 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 - Cookie sessions, atomic refresh and password budgets, password changes, encrypted TOTP/recovery, private account history and owner-only account disable/reactivate.
 - Optional one-use password recovery with TLS mail configuration, MFA preservation, epoch invalidation and browser reset-link handling.
 - Optional registered-email proof and seven-day email-bound invitation lifecycle with explicit preview/acceptance, issuer authority checks and role preservation.
+- Explicit open/invitation-only/closed registration and optional mandatory email proof with limited browser account sessions; stored-session expiry enforced on every browser request.
 - Organization role/membership lifecycle, anti-orphan guards, scoped hash-only tokens and membership-lifetime invalidation.
 - Project edits/archive/templates/navigation; asset metadata/bulk registration/navigation/history; assessment cancellation/retry/history/navigation.
 - Finding filters/pagination, bulk triage/owner/history, comments, organization SLA policy, remediation edits and coverage-aware retests.
@@ -19,7 +20,7 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 
 ## Next implementation order
 
-1. Add optional OIDC. Explicit open/invite-only/closed registration and mandatory verification policies are implemented. Preserve MFA and epoch/token invalidation semantics; optional email proof and invitations are implemented.
+1. Add optional OIDC. Preserve current MFA, admission policy and credential epoch/token invalidation semantics.
 2. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
 3. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
 4. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.

@@ -1,13 +1,13 @@
 # Implementation status
 
-Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `2a4f6d2195a004f56cc1ad03a7d9f94556b6322b`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
+Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `8bb58f2fcd0524a8961aa75f4c1c55dccfad9b58`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
 | Area | Implemented and exercised | Remaining limits |
 |---|---|---|
 | Runtime | Validated configuration, bounded request bodies/health, pinned backend dependencies and frozen Yarn installation | Production deployment and upgrade/restore drills remain |
 | Containers | Non-root API and Nginx frontend, fixed API proxy, Compose health/smoke tests | One API worker; local Mongo service is for development |
-| Authentication | Cookie sessions, CSRF/origin controls, atomic refresh rotation, coordinated browser credential changes/retries, password changes and database-enforced attempt budgets | Open/invitation-only/closed registration and optional required verification; OIDC remains; mail flows require explicit configuration |
-| Email verification | Optional TLS mail, hash-only 24-hour one-use links, account/address/epoch binding, explicit confirmation and private status | Optional required verification gates workspace requests; limited account sessions remain usable; delivery stays opt-in and mocked |
+| Authentication | Cookie sessions, CSRF/origin controls, atomic refresh rotation, coordinated browser credential changes/retries, password changes, stored-session expiry, database-enforced attempt budgets and open/invitation-only/closed registration | OIDC remains; mail flows require explicit configuration |
+| Email verification | Optional TLS mail, hash-only 24-hour one-use links, account/address/epoch binding, explicit confirmation, private status and optional required workspace admission | Limited account sessions remain usable; delivery stays opt-in and mocked |
 | Invitations | Optional administrator send/list/revoke, authenticated organization/role preview, matching-email acceptance, seven-day expiry, fresh issuer authority and role preservation | Single-worker lock; non-transactional claim/membership/audit writes; no durable mail queue |
 | Password recovery | Optional TLS SMTP, hash-only expiring one-use links, credential-epoch binding, MFA preservation and old credential invalidation; private fragment-based form | Disabled by default; no durable mail queue or live delivery acceptance |
 | MFA | Encrypted TOTP enrollment, atomic anti-replay, hash-only one-use recovery codes, replacement/removal, step-up for password changes | Optional operator key; no automatic key rewrapping |
@@ -39,10 +39,10 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 
 | Check | Result | Run |
 |---|---|---|
-| Backend Python 3.11/3.12 with MongoDB | 219 passed | [38918636255](https://github.com/ibrahim1101/vapt-x/actions/runs/38918636255) |
-| Frontend unit/components and production build | 84 passed, 27 suites; build passed | [38918636500](https://github.com/ibrahim1101/vapt-x/actions/runs/38918636500) |
-| Docker smoke | Passed | [38918636232](https://github.com/ibrahim1101/vapt-x/actions/runs/38918636232) |
-| Chromium against Nginx/Compose | Passed | [38918636285](https://github.com/ibrahim1101/vapt-x/actions/runs/38918636285) |
+| Backend Python 3.11/3.12 with MongoDB | 225 passed | [38927206284](https://github.com/ibrahim1101/vapt-x/actions/runs/38927206284) |
+| Frontend unit/components and production build | 90 passed, 28 suites; build passed | [38927206314](https://github.com/ibrahim1101/vapt-x/actions/runs/38927206314) |
+| Docker smoke | Passed | [38927206294](https://github.com/ibrahim1101/vapt-x/actions/runs/38927206294) |
+| Chromium against Nginx/Compose | Passed | [38927206397](https://github.com/ibrahim1101/vapt-x/actions/runs/38927206397) |
 
 Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
 
