@@ -51,7 +51,7 @@ def _json(content):
 
 
 def parse_report(scanner, content):
-    if scanner not in {"nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov", "prowler"}:
+    if scanner not in {"nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov", "prowler", "mobsf"}:
         raise ValueError("Unsupported scanner report format")
     if not isinstance(content, str) or not content.strip():
         raise ValueError("Report must contain text")
@@ -63,6 +63,11 @@ def parse_report(scanner, content):
         if len(rows) >= MAX_FINDINGS:
             raise ValueError("Maximum 2,000 findings per import")
         rows.append(row)
+
+    if scanner == "mobsf":
+        from mobsf_import import mobsf_findings
+        mobsf_findings(_json(content), append)
+        return rows
 
     if scanner == "prowler":
         from import_extensions import prowler_findings

@@ -297,3 +297,7 @@ Updated the architecture to remove outdated baseline claims about unavailable ca
 ## Cloud/configuration import expansion
 
 Implemented Prowler ASFF failed resource imports and Trivy mixed vulnerability/misconfiguration/secret imports through the existing scope-authorized workflow. Added source metadata display, raw-report omission, source-code/match omission, strict status/range/schema validation and cumulative size/row limits. Added parser, frontend, Mongo persistence/authorization/deduplication tests and Chromium import fixtures. Local focused parsers: 31 passed with 91 subtests; full local suite before the additional Mongo test: 259 passed, 13 skipped, 179 subtests. CI acceptance pending.
+
+## MobSF Android static import continuation
+
+Continued after the cloud/configuration push with an Android static JSON adapter, separate code/manifest provenance, canonical file/line identity, secure/good omission, mobile/cloud report-association asset labels and frontend source details. Extended real-Mongo import acceptance and Chromium fixtures for the third adapter. Focused parser validation: 32 passed, 100 subtests; frontend/E2E syntax and whitespace checks passed. No APK, cloud credential or external scanner execution was introduced. Full CI acceptance pending.

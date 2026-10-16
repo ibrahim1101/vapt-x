@@ -14,6 +14,7 @@ class CloudConfigPersistenceTests(unittest.TestCase):
     INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINARY='nmap',VAPTX_LOCAL_HTTP='1')
    sys.path.insert(0,'tests')
    from test_cloud_config_imports import PROWLER,TRIVY_MIXED
+   from test_mobsf_import import MOBSF
    from server import app
    mongo=MongoClient(os.environ['MONGO_TEST_URL']);db=mongo[database]
    try:
@@ -30,21 +31,21 @@ class CloudConfigPersistenceTests(unittest.TestCase):
      now=datetime.now(timezone.utc)
      scope=post('scopes',{'project_id':project['id'],'target':'training://local','authorized':True,
       'authorization_reference':'Synthetic report association only','starts_at':(now-timedelta(hours=1)).isoformat(),
-      'ends_at':(now+timedelta(hours=1)).isoformat(),'allowed_scanners':['prowler','trivy']})
+      'ends_at':(now+timedelta(hours=1)).isoformat(),'allowed_scanners':['prowler','trivy','mobsf']})
      asset=post('assets',{'project_id':project['id'],'scope_id':scope['id'],'name':'Synthetic report association','target':'training://local'})
      assessment=post('assessments',{'project_id':project['id'],'name':'Synthetic import acceptance','asset_ids':[asset['id']]})
-     for scanner,fixture,count in [('prowler',[PROWLER],1),('trivy',TRIVY_MIXED,2)]:
+     for scanner,fixture,count in [('prowler',[PROWLER],1),('trivy',TRIVY_MIXED,2),('mobsf',MOBSF,2)]:
       body={'assessment_id':assessment['id'],'asset_id':asset['id'],'scanner':scanner,'content':json.dumps(fixture)}
       job=post('imports',body);assert job['finding_count']==count,job
       assert job['raw_output'].startswith('Raw report omitted'),job
       assert post('imports',body)['finding_count']==0
-     rows=list(db.findings.find({'assessment_id':assessment['id']}));assert len(rows)==3,rows
+     rows=list(db.findings.find({'assessment_id':assessment['id']}));assert len(rows)==5,rows
      assert all(r['verification']=='imported-unverified' and r['source']=='import' and r['org_id']==org['id'] for r in rows)
      stored=json.dumps(rows)+json.dumps(list(db.jobs.find({'assessment_id':assessment['id']})))
-     for private in ('omitted-tag','private-code-value','private-message-value','synthetic-detected-match'):
+     for private in ('omitted-tag','private-code-value','private-message-value','synthetic-detected-match','private-secret-value','private-strings-value','private.invalid'):
       assert private not in stored,private
      page=client.get('/api/findings',params={'assessment_id':assessment['id']}).json()
-     assert page['total']==3 and all('import_metadata' in row for row in page['items']),page
+     assert page['total']==5 and all('import_metadata' in row for row in page['items']),page
      before=db.jobs.count_documents({})
      body={'assessment_id':assessment['id'],'asset_id':asset['id'],'scanner':'prowler','content':'[{}]'}
      response=client.post('/api/imports',headers=headers(),json=body);assert response.status_code==422,response.text
@@ -60,7 +61,7 @@ class CloudConfigPersistenceTests(unittest.TestCase):
      db.scopes.update_one({'_id':scope['id']},{'$set':{'allowed_scanners':['trivy']}})
      assert client.post('/api/imports',headers=headers(),json=body).status_code==403
      assert db.jobs.count_documents({})==before
-     assert db.audit_events.count_documents({'org_id':org['id'],'action':'jobs.created'})==4
+     assert db.audit_events.count_documents({'org_id':org['id'],'action':'jobs.created'})==6
    finally:
     mongo.drop_database(database);mongo.close()
   ''')
