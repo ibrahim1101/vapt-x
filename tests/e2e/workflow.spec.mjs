@@ -490,5 +490,11 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await expect(page.getByTestId('form-submit')).toBeDisabled();
   await page.getByTestId('invitation-cancel').click();
   await expect(page.getByTestId('field-password')).toBeVisible();
+  await expect(page.getByTestId('oidc-sign-in')).toBeHidden();
+  await page.goto('/#oidc_result=failed');
+  await expect(page.getByRole('heading',{name:'Identity sign-in failed'})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>window.location.hash)).toBe('');
+  await page.getByTestId('oidc-back').click();
+  await expect(page.getByTestId('field-password')).toBeVisible();
   expect(pageErrors).toEqual([]);
 });

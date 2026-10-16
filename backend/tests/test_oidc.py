@@ -117,3 +117,18 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
    with self.assertRaises(ValueError):await oidc.request_json('https://identity.example.com/keys',limit=2)
   with patch.object(oidc,'resolve_public',new_callable=AsyncMock,side_effect=ValueError('private')):
    with self.assertRaises(ValueError):await oidc.request_json('https://identity.example.com/keys')
+
+class RouteTests(unittest.TestCase):
+ def test_disabled_flow_and_trusted_origin_csrf_account_boundaries(self):
+  from fastapi.testclient import TestClient
+  import server
+  with patch.dict('os.environ',{'OIDC_ENABLED':'0'}),patch.object(oidc,'charge_auth_attempt',new_callable=AsyncMock),patch.object(oidc,'db') as db:
+   client=TestClient(server.app)
+   self.assertEqual(client.get('/api/auth/oidc').json(),{'enabled':False})
+   self.assertEqual(client.get('/api/auth/oidc/link').status_code,401)
+   self.assertEqual(client.post('/api/auth/oidc/start').status_code,403)
+   self.assertEqual(client.post('/api/auth/oidc/start',headers={'origin':'http://localhost:3000'}).status_code,503)
+   self.assertEqual(client.post('/api/auth/oidc/complete',headers={'origin':'http://localhost:3000'},json={}).status_code,403)
+   self.assertEqual(client.post('/api/auth/oidc/unlink',headers={'origin':'http://localhost:3000'},json={}).status_code,403)
+   response=client.get('/api/auth/oidc/callback?state=private&code=private',follow_redirects=False)
+   self.assertTrue(response.headers['location'].endswith('failed'));db.oidc_flows.find_one_and_update.assert_not_called()

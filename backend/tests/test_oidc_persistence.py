@@ -36,7 +36,7 @@ class OIDCPersistenceTests(unittest.TestCase):
    try:
     with patch('oidc.resolve_public',new_callable=AsyncMock,return_value='93.184.216.34'),patch('oidc.request_json',side_effect=provider),TestClient(app) as client:
      origin={'origin':'http://localhost:3000'}
-     def headers():return {**origin,'x-csrf-token':client.cookies.get('csrf')}
+     def headers():return {**origin,'x-csrf-token':client.cookies.get('csrf') or ''}
      def begin(path='/api/auth/oidc/start',body=None):
       result=client.post(path,headers=headers(),json=body or {})
       assert result.status_code==200,result.text
@@ -75,7 +75,7 @@ class OIDCPersistenceTests(unittest.TestCase):
      mongo[database].users.update_one({'_id':uid},{'$set':{'mfa_enabled':False}})
      target=begin();assert callback(target).headers['location'].endswith('pending')
      correlation='oidc_pending='+client.cookies.get('oidc_pending')+'; csrf='+client.cookies.get('csrf')
-     concurrent_headers={**origin,'cookie':correlation,'x-csrf-token':client.cookies.get('csrf')}
+     concurrent_headers={**origin,'cookie':correlation,'x-csrf-token':client.cookies.get('csrf') or ''}
      with ThreadPoolExecutor(max_workers=2) as pool:
       outcomes=list(pool.map(lambda _:client.post('/api/auth/oidc/complete',headers=concurrent_headers,json={}).status_code,range(2)))
      assert sorted(outcomes)==[200,401],outcomes
