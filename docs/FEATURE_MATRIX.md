@@ -1,64 +1,43 @@
-# Implementation-status matrix
+# Implementation status
 
-Audit: 2026-10-14 UTC; baseline `a2dcdae`. “Implemented, untested” means relevant source exists, not that acceptance criteria have passed. “In progress” includes incomplete workflows/helpers. Historical generated test narratives are not current verification. Session checks are recorded in [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md). Review: [PR #1](https://github.com/ibrahim1101/vapt-x/pull/1).
+Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `752b7047612f8b225f4db5738a72ecde51a75349`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
-Priority: P0 security/startup blockers, P1 core product, P2 expansion, P3 later capabilities.
+| Area | Implemented and exercised | Remaining limits |
+|---|---|---|
+| Runtime | Validated configuration, bounded request bodies/health, pinned backend dependencies and frozen Yarn installation | Production deployment and upgrade/restore drills remain |
+| Containers | Non-root API and Nginx frontend, fixed API proxy, Compose health/smoke tests | One API worker; local Mongo service is for development |
+| Authentication | Cookie sessions, CSRF/origin controls, atomic refresh rotation, password changes and database-enforced attempt budgets | No email verification or password-reset flow |
+| MFA | Encrypted TOTP enrollment, atomic anti-replay, hash-only one-use recovery codes, replacement/removal, step-up for password changes | Optional operator key; no automatic key rewrapping |
+| Accounts | Private paginated security history; platform-owner search and disable/reactivate with password/MFA | History is best effort; owner accounts protected; in-flight work may finish |
+| Organizations | Switching, fixed roles, membership grants/removal, fresh actor and anti-orphan guards | Registered accounts only; invitations/OIDC/custom roles remain |
+| API tokens | One-time display, hash-only storage, expiry/revocation, organization/current-role and membership binding | No service identities or project ACL |
+| Tenant boundaries | Organization-scoped repositories and negative API/browser tests including downloads and jobs | Project-level authorization remains absent |
+| Projects | Metadata, archive/restore, owner labels, templates, complete server pagination/search and related counts | Archive does not withdraw scanning authorization |
+| Assets | Metadata/criticality/tags, bulk registration receipts, server pagination/search/activity | Owner labels confer no permission; target/scope immutable |
+| Authorization | Exact targets, explicit reference/time window/scanner profiles, scope withdrawal, fresh destination checks | No authorization attachment/approval workflow |
+| Assessments | Creation, pagination/search, cancellation/retry/history, coverage-aware retest comparison | Process-local check ownership; restart marks interrupted jobs; no scheduler/durable assessment queue |
+| Checks | Bounded HTTP headers/cookies/TLS/security.txt/DNS and constrained Nmap; managed training target | Non-exploitative and intentionally limited; no exhaustive scanner or production sandbox |
+| Finding imports | Nmap, Nuclei, Semgrep, Trivy, ZAP, Gitleaks and Checkov with synthetic fixtures | Import assertions remain unverified; not every upstream schema is supported |
+| API/SBOM inventory | OpenAPI and CycloneDX/SPDX JSON import, deduplication and asset inventory view | Inventory only; no endpoint execution, external references or dependency completeness guarantee |
+| Findings | Normalization, scanner fingerprints, server filters/search/pagination, atomic triage history, bulk triage/owner and comments | Cross-scanner correlation and advanced CVSS/version workflows remain |
+| Intelligence | Cached FIRST EPSS/CISA KEV/NVD/direct OSV CVE facts, offline/stale behavior and attribution | Heuristic prioritization; direct OSV ID misses do not rule out aliases |
+| Remediation | Task creation/edit, assignee/due-date validation, progress/completion and organization SLA policy | Assignees are labels; dedicated complete task navigation is next |
+| Exports/evidence | Private CSV/JSON export, formula escaping, chunk integrity/completion and download checksum checks | Complete-set operation caps; evidence size limits; no malware scanning or retention policy |
+| Reports | Technical/executive/remediation PDFs, preview, branding/custom sections, versions and integrity-checked source snapshots | Bounded complete sets and output sizes; no public sharing or scheduling |
+| AI | Optional Claude/OpenAI/Gemini/Ollama/compatible interfaces, model allowlists, health, usage and context redaction | No live provider validation; redaction is heuristic; no tool invocation |
+| Overview | Complete server counts and severity chart, query-time coverage disclosures and explicit failure states | Not a security score; counts can change between queries; previews/selectors remain bounded |
+| Webhooks | Encrypted opt-in configuration, pinned HTTPS/HMAC delivery, leased outbox, bounded retries/history, secret rotation and removal | No exactly-once delivery or atomic domain-write/outbox transaction; no live destination activated |
+| Audit | Organization events and account history with explicit attribution/tenant checks | Bounded organization UI; not tamper-proof; account history is best effort |
+| Other integrations | Generic signed webhooks are available | Native ticket/chat/email/SIEM adapters remain |
+| Operations/release | Backend/frontend/Docker/real Nginx Chromium pipelines | Retention, backup/restore, monitored deployment, rollback, broader accessibility and release controls remain |
 
-| Feature | Category | Priority | Implementation status | Test status | Known limitations | Relevant source files | Related pull request |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Required environment validation/startup diagnostics | Foundation | P0 | In progress | Settings and failure-cleanup unit tests pass | Production configuration and live startup need verification | `backend/config.py`, `backend/server.py`, `backend/core.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Bounded request bodies and database health | Foundation | P0 | Verified working | ASGI limit and mocked health regression tests pass | Proxy/deployment limits need validation | `backend/server.py`, `backend/request_limits.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Runtime dependency cleanup/reproducible installs | Foundation | P0 | In progress | Backend clean install; frontend CI installation, 28 tests and build pass | Baseline dependency set was oversized; full lock/build evidence required | `backend/requirements.txt`, `frontend/package.json`, frontend lockfile (absent) | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| MongoDB development service | Foundation | P0 | Implemented, untested | Not run in this environment | Docker unavailable here; local-only unauthenticated DB | `compose.local.yml` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Application containers and Linux deployment | Foundation | P1 | In progress | Docker unavailable locally | Non-root API Dockerfile/profile added; frontend image and production deployment absent | `backend/Dockerfile`, `compose.local.yml` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Registration/login/logout/refresh | Identity | P0 | Implemented, untested | Mongo identity/session integration passed in CI; browser pending | Atomic refresh replay tests pass; production cookies and full lifecycle remain incomplete | `backend/auth.py`, `backend/core.py`, `frontend/src/components/access.jsx`, `frontend/src/lib/api.js` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Local cookie policy, CSRF, CORS | Identity | P0 | Implemented, untested | Regression checks pending | Strict loopback development mode; one configured frontend origin | `backend/auth.py`, `backend/server.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Password policy/login throttling | Identity | P0 | In progress | Regression checks pending | Email failure counter only; no general distributed API rate limiter | `backend/auth.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Organizations, switching, fixed roles, members | Identity | P0 | Implemented, untested | Membership and permission unit tests pass; lifecycle pending | Add existing registered users only; no invitation lifecycle/removal workflow | `backend/auth.py`, `backend/core.py`, `frontend/src/App.js` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Organization-scoped repository | Governance | P0 | Implemented, untested | Tenant filter unit test passes; full endpoint suite pending | Raw DB helpers also require review; no project ACL | `backend/repository.py`, `backend/core.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| MFA, reset, verification, account disable | Identity | P1 | Not started | None | Core account lifecycle incomplete | `backend/auth.py` | — |
-| Project ACL/custom roles/service accounts/API tokens | Identity | P1 | Not started | None | Token generation helper is not an authentication workflow | `backend/core.py` | — |
-| Optional OIDC/SSO | Identity | P3 | Deferred | None | Follow verified core identity | — | — |
-| Project creation/listing/dashboard | Projects | P1 | Implemented, untested | Persistent workflow pending | Edit/archive/templates/ownership/export absent | `backend/workflow.py`, `frontend/src/components/dashboard.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Exact-host scope and rules of engagement | Authorization | P0 | Implemented, untested | Scope/project/host/window/profile regression tests pass | Text reference only, no approval attachment workflow | `backend/workflow.py`, `backend/scanners.py`, `frontend/src/components/workspace-forms.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Asset registration and inventory | Assets | P1 | Implemented, untested | Workflow pending | Four kind labels, web target syntax; no bulk import/ownership/criticality | `backend/workflow.py`, `frontend/src/components/workspace-pages.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Asset relationships/history/exposure scoring | Assets | P2 | Not started | None | No specialized cloud/API/mobile inventory | — | — |
-| Assessment creation and job status/logs | Assessments | P1 | Implemented, untested | Workflow pending | BackgroundTasks, no durable queue, process-local concurrency | `backend/workflow.py`, `backend/scanners.py`, `frontend/src/components/workspace-pages.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Cancellation/scheduling/retry/worker recovery | Assessments | P1 | In progress | Restart behavior unverified | Startup marks jobs interrupted; no resumable recovery/cancel API | `backend/server.py`, `backend/scanners.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Safe HTTP/cookie/TLS/security.txt/DNS checks | Scanners | P0 | Implemented, untested | Mocked DNS/pinned transport regression tests pass; live checks pending | DNS is resolution only; TLS checks certificate/expiry; no exhaustive posture audit | `backend/scanners.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Constrained Nmap execution | Scanners | P1 | Implemented, untested | Nmap execution unverified | External binary; four web ports only; no worker sandbox | `backend/scanners.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Nmap/Nuclei/Semgrep/Trivy/ZAP report imports | Scanners | P1 | Implemented, untested | 18 synthetic parser tests pass; full workflow CI pending | Import-only except Nmap; limited schema variants; uploader-declared attribution | `backend/importers.py`, `backend/workflow.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| OpenAPI/Schemathesis/Gitleaks/Checkov/Prowler/MobSF/SBOM | Scanners | P2 | Not started | None | No adapter or functioning UI found | — | — |
-| Finding normalization/deduplication/triage/search | Findings | P1 | Implemented, untested | Parser/persistence/UI pending | Scanner-specific fingerprints; no cross-scanner correlation; workspace truncation explicitly disclosed | `backend/importers.py`, `backend/scanners.py`, `backend/workflow.py`, `frontend/src/components/dashboard.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| CVSS/CVE/CWE structured intelligence, EPSS/KEV/OSV/NVD | Findings | P2 | Not started | None | CVE text in imports is not structured enrichment | — | — |
-| Advanced filters/bulk actions/SLA/history/exports | Findings | P2 | Not started | None | Basic client-side filters only | `frontend/src/components/dashboard.jsx` | — |
-| Remediation tasks/assignee/due date/status | Remediation | P1 | Implemented, untested | Workflow pending | Assignee/due date are free text; no validated member assignment/SLA | `backend/workflow.py`, `frontend/src/components/workspace-pages.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Retest/baseline comparison | Remediation | P1 | Implemented, untested | Coverage regressions pending | Not-observed does not mean resolved; Complete-set guard at 5,000 rows; larger operations explicitly rejected | `backend/workflow.py`, `frontend/src/components/workspace-pages.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Evidence chunks/signatures/checksums/download | Evidence | P0 | Implemented, untested | Chunk integrity and ready-file tamper regression pass; concurrency coverage incomplete | 10 MiB/file; no retention/tenant quota/malware scanning | `backend/evidence.py`, `frontend/src/lib/api.js` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Stored PDF report snapshots | Reporting | P1 | Implemented, untested | Generation/layout/API pending | Download integrity regression passes; generation/layout unverified; 5,000-row complete-set cap; one template | `backend/reporting.py`, `frontend/src/components/workspace-pages.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Branding/report scheduling/sharing | Reporting | P2 | Not started | None | No public sharing controls or template branding | — | — |
-| Optional Claude analyst/history | AI | P1 | Implemented, untested | Live provider not invoked | Key/SDK required; at most 30 findings; no secret redaction | `backend/analyst.py`, `frontend/src/components/workspace-pages.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Multi-provider/local AI/cost visibility | AI | P2 | Not started | None | Provider map only includes Claude | `backend/analyst.py` | — |
-| Dashboard/severity chart/search/theme/responsive nav | UI/analytics | P1 | Implemented, untested | Browser/accessibility pending | Counts reflect loaded rows; no historical/coverage scoring | `frontend/src/App.js`, `frontend/src/components/dashboard.jsx`, `frontend/src/App.css` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Advanced analytics/relationships/attack paths | UI/analytics | P2 | Not started | None | No fabricated or inferred attack graph supplied | — | — |
-| Audit trail UI and events | Governance | P0 | Implemented, untested | Audit isolation pending | Latest 100; application append-only, not tamper-evident; auth gaps | `backend/core.py`, `frontend/src/components/workspace-pages.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Webhook signing/retry helper | Integrations | P1 | In progress | No delivery performed | No management API/UI; DNS pinning/secret storage gaps | `backend/webhooks.py` | — |
-| GitHub/GitLab/Jira/Slack/Teams/email/SIEM/OpenTelemetry | Integrations | P2 | Not started | None | No activated integration workflow | — | — |
-| Encryption/retention/backup/restore/compliance | Governance | P1 | Not started | None | Operational controls must precede sensitive deployment | — | — |
-| Backend regression suite/CI | Quality | P0 | In progress | Original batch: 15 passed in Python 3.11/3.12 CI; follow-up: 15 passed, 1 skipped locally | Baseline contained no executable suite beyond empty package | `backend/pytest.ini`, `backend/tests/`, `.github/workflows/backend.yml` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Browser E2E/Docker integration/restore drills | Quality | P1 | Not started | None | Requires isolated runtime and repeatable fixtures | — | — |
-| Desktop packaging | Release | P3 | Deferred | None | Web stability first | — | — |
-| Assessment finding CSV/JSON export | Reporting | P1 | In progress | Backend unit/real Mongo and frontend export component/build CI pass | Complete set limited to 5,000; CSV formula cells escaped; no public sharing | `backend/reporting.py`, `frontend/src/components/finding-exports.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Core import/evidence/PDF/retest/tenant workflow | Quality | P0 | Verified working | 51 tests pass in Python 3.11/3.12 CI with MongoDB | API integration only; browser and live external scanning remain unverified | `backend/tests/test_persistence.py` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Scope revocation with reason/actor | Authorization | P0 | In progress | Backend unit and real Mongo tests pass; browser workflow pending | Queued jobs recheck; already running checks may finish within existing timeout | `backend/workflow.py`, `frontend/src/components/scope-revocation.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
-| Owned active-session listing/revocation | Identity | P0 | In progress | Backend ownership/CSRF tests, real Mongo and frontend components pass | Latest 100 shown with truncation flag; no device/IP labels or MFA | `backend/auth.py`, `frontend/src/components/session-settings.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
+## Latest acceptance evidence
 
-| Finding triage history | Findings | P1 | In progress | Nine unit tests plus real Mongo history and frontend component CI pass | Latest 100 retained, total reported; pre-tracking history not reconstructed | `backend/workflow.py`, `frontend/src/components/finding-history.jsx` | [#1](https://github.com/ibrahim1101/vapt-x/pull/1) |
+| Check | Result | Run |
+|---|---|---|
+| Backend Python 3.11/3.12 with MongoDB | 178 passed | [38880817280](https://github.com/ibrahim1101/vapt-x/actions/runs/38880817280) |
+| Frontend unit/components and production build | 56 passed, 20 suites; build passed | [38880817443](https://github.com/ibrahim1101/vapt-x/actions/runs/38880817443) |
+| Docker smoke | Passed | [38880817344](https://github.com/ibrahim1101/vapt-x/actions/runs/38880817344) |
+| Chromium against Nginx/Compose | Passed | [38880817604](https://github.com/ibrahim1101/vapt-x/actions/runs/38880817604) |
 
-A feature becomes **Verified working** only for a stated tested scope. API integration evidence does not establish browser functionality, live scanner coverage, or production readiness.
-
-### Continued product management
-
-Project editing, archive/restore and owner labels now persist through an organization-scoped, write-permission-protected PATCH endpoint with audit events. Register search matches name/description/owner among loaded projects; status filtering defaults to active. Existing 1,000-project workspace limit still applies. Ownership labels do not grant permissions. Four focused backend tests pass; extended Mongo/Chromium verification pending.
-
-Asset metadata editing now persists name, owner label, criticality and up to 20 normalized tags. Target/scope/project/kind remain immutable. The asset table supports metadata search, criticality filtering and loaded-row pagination. New backend permission/validation tests pass; Mongo and browser assertions added, CI pending. Dedicated asset history and server-side inventory pagination remain next.
+Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.

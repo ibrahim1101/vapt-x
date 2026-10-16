@@ -1,60 +1,31 @@
 # VAPT-X engineering roadmap
 
-Audit date: 2026-10-14 UTC. Baseline: `dev/vapt-x-stabilization`, commit `a2dcdae`.
+Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `752b704` passed backend (178 tests with Mongo), frontend (56 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
-This roadmap tracks implementation work, not promised release dates. The existing application is retained. Source presence is not proof that a workflow runs; see [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+## Completed increments
 
-## Batch A — make the application run (current)
+- Runtime validation, request/resource limits, reproducible dependencies, API/frontend containers and CI.
+- Cookie sessions, atomic refresh and password budgets, password changes, encrypted TOTP/recovery, private account history and owner-only account disable/reactivate.
+- Organization role/membership lifecycle, anti-orphan guards, scoped hash-only tokens and membership-lifetime invalidation.
+- Project edits/archive/templates/navigation; asset metadata/bulk registration/navigation/history; assessment cancellation/retry/history/navigation.
+- Finding filters/pagination, bulk triage/owner/history, comments, organization SLA policy, remediation edits and coverage-aware retests.
+- Scanner/import safety, secret/IaC imports, API/SBOM inventory, cached CVE intelligence and private exports/evidence integrity.
+- Versioned PDF templates/preview/branding/custom sections/source snapshots; optional multi-provider AI with bounded redaction/usage.
+- Complete overview counts and encrypted opt-in signed webhook outbox with retries, rotation/removal and delivery history.
 
-- Validate required configuration before startup; separate local HTTP and production HTTPS settings.
-- Bound database startup/health checks, close resources reliably, add actionable startup diagnostics.
-- Enforce request size limits for malformed, absent and misleading Content-Length headers.
-- Correct optional Anthropic availability reporting and remove remaining Emergent runtime dependencies.
-- Reduce backend dependencies to actual runtime needs; establish reproducible, tested dependency installation.
-- Verify React build, database persistence and cookie-based authentication with an isolated database.
-- Add regression tests and CI; provide reproducible development containers and Windows/Linux setup.
+## Next implementation order
 
-Batch exit: clean install, backend startup, frontend build, login/refresh/logout, organization/project persistence and restart verified. CI and local runtime evidence must accompany the implementation.
+1. Finish complete server navigation for remediation tasks, scan jobs, evidence, scope and organization audit records; retain explicit size/coverage limits in report operations and selectors.
+2. Complete account reset/email verification and invitation lifecycle with explicit delivery configuration; then optional OIDC. Preserve MFA and token invalidation on recovery.
+3. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
+4. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
+5. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.
+6. Add one native ticket/notification integration at a time with credential storage, bounded egress, tenant isolation and explicit activation.
+7. Define retention/quotas, key rewrapping, tamper-proof audit storage and backup/restore drills; implement monitored deployment, rollback and versioned release procedures.
+8. Broaden large-dataset, responsive/keyboard/error-state acceptance. Desktop packaging follows web stability.
 
-## Batch B — complete core assessment workflows
+## Constraints and handoff
 
-Priority order:
+The deployment remains single-worker. Assessment checks and membership mutation coordination are process-local. Webhook delivery leases are durable but do not make domain writes and enqueue atomic. No production release or multiworker-readiness claim is made.
 
-1. Exercise tenant isolation and role enforcement on every resource, including downloads, AI sessions and jobs.
-2. Finish server-side pagination/search: workspace truncation is disclosed and reports/comparisons now require complete sets up to 5,000 rows; large inventories still need full navigation.
-3. Validate scanner scope, DNS pinning, redirect blocking, time windows and resource limits using synthetic fixtures and the owned training target.
-4. Report-download integrity/missing-file handling now has regression coverage; validate large reports and evidence completion races next.
-5. Complete assessment cancellation and bounded job cleanup; enforce concurrency across workers before enabling more than one API worker.
-6. Extend the 18 importer fixtures to additional upstream schema variants and partial-persistence failure cases.
-7. Add project edits/archive and genuine asset search/pagination; preserve historical references.
-8. Complete workflow browser tests for project → scope → asset → assessment → scan/import → finding → evidence → task → report → retest.
-
-Batch exit: core UI/API workflows tested with persistent MongoDB, negative authorization tests, scanner mocks and honest coverage reporting.
-
-## Batch C — vulnerability management
-
-Add asset ownership/criticality, validated CVE/CWE fields, versioned CVSS data, cross-scanner correlation, structured triage history, bulk actions, SLA rules, exports and historical snapshots. Introduce EPSS/KEV/OSV/NVD enrichment only with attribution, caching, timeouts and offline behavior. Scanner observations, imported assertions and analyst confirmations remain distinct.
-
-## Batch D — integrations and automation
-
-Introduce scoped API tokens and service identities with explicit revocation and project constraints. Implement scheduling, cancellation and recoverable job ownership before choosing a durable queue. Harden the dormant webhook helper with pinned destinations, proxy controls, bounded delivery workers, encrypted secrets, event subscriptions and audited management routes. Add one useful ticket/notification integration at a time; never activate credentials or external delivery without authorization.
-
-## Batch E — AI and analytics
-
-Expand the existing Claude adapter into optional provider interfaces; add provider health, settings, local inference and usage visibility. Add redaction and prompt-injection tests before sending more context. Build server-side analytics with complete counts and explicit coverage; do not infer a security score from incomplete observations.
-
-## Batch F — enterprise hardening
-
-Add account disable/reset/verification, MFA and recovery codes, session/device administration, project-level permissions, invitation lifecycle and optional OIDC. Define retention, encryption/key management, audit integrity, backup/restore and operational alerting. Gate each feature on tenant-isolation regressions.
-
-## Batch G — polish and release readiness
-
-Complete responsive and keyboard-accessible UI workflows; verify PDF layout, large datasets, loading/error states and empty states. Establish release/version/changelog procedures, reproducible images, dependency/secret checks, restore drills and monitored deployment. Desktop packaging remains deferred until the web application is stable.
-
-## Next-session handoff
-
-Read the development log and feature matrix; inspect current branch/PR/CI state; reproduce the recorded checks. Prioritize security/correctness, blockers, user value and testability. Work on independent modules in parallel only when authorized, and serialize Git writes and migrations. End each session with accurate evidence and reviewable commits; no claim of indefinite background work.
-
-Continuation: project metadata editing/archive/owner labels and loaded-register search implemented. Next: asset metadata management and server-side inventory/finding pagination. Extended browser remediation/retest/tenant checks are pending CI evidence.
-
-Asset owner/criticality/tags and metadata editing implemented; tenant and immutable-target regressions added. Next independent work: full server-side finding/inventory navigation.
+Read the development log, inspect current branch/PR/CI and preserve any newer remote changes before editing. Favor complete tested increments, synthetic fixtures and reviewable commits. Do not activate live scanners/providers/destinations or merge/release as part of ordinary development. Earlier historical checkpoint notes are superseded by the current matrix and latest CI evidence.

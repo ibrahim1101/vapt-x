@@ -1,36 +1,22 @@
 # Release readiness
 
-**Decision: not ready for production release.** Audit date: 2026-10-14 UTC. Backend core workflow and Docker startup now have passing CI evidence. Frontend component/build and backend/container checks pass; browser coverage and enterprise operational controls remain incomplete.
+Updated 2026-10-16. **Not ready for production release.** Core workflows have repeatable API, container and browser evidence; the full roadmap and operational acceptance are incomplete.
 
-## Required gates
+Verified code: `752b7047612f8b225f4db5738a72ecde51a75349`. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for current implementation and CI links, and [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) for historical checkpoints.
 
-| Gate | Audit status | Evidence required |
-| --- | --- | --- |
-| Reproducible backend/frontend installs | CI installs/build pass; frozen-lock rerun pending | Committed backend pins and CI-generated frontend lock; repeat frozen install |
-| Configuration/startup/health/request limits | In progress | Regression tests and live startup/degraded readiness |
-| MongoDB persistence and upgrade behavior | Core integration verified in CI | Restart/upgrade/restore behavior still requires dedicated tests |
-| Authentication/CSRF/cookie/tenant regressions | Pending | Positive and negative API tests, two-tenant access tests and browser cookie validation |
-| Core assessment workflow | API integration verified; UI pending | Mongo CI covers synthetic import/evidence/PDF/retest; browser path remains |
-| Scanner destination/resource controls | Pending | Mocked transport and authorized controlled execution; process timeout/cancellation behavior |
-| Complete reports/comparisons | Guard and integrity regressions pass | Complete sets capped at 5,000; large PDF layout and snapshot races remain |
-| Job safety for deployment topology | Blocking limitation | Single-worker constraint until distributed ownership/restart/concurrency semantics exist |
-| Dependency and secret checks | Pending | Clean scans with reviewed exceptions, no committed credentials/customer evidence |
-| Backup/restore, encryption and retention | Not started | Documented operational settings and successful restore drill |
-| Accessibility/responsiveness/error states | Pending | Browser tests and manual review |
-| CI, images, deployment and monitoring | Backend CI and Docker startup verified | Frontend pipeline, deployment monitoring and rollback still pending |
-| External integrations | Disabled/not verified | Explicit credentials/authorization, safe egress and audited delivery tests |
+| Gate | Current evidence | Outstanding work |
+|---|---|---|
+| Reproducible installation/build | Backend pins, frozen Yarn, Python 3.11/3.12, 56 frontend tests and production build | Dependency/secret review and release reproducibility policy |
+| Startup/configuration/health/body limits | Unit and Compose startup/smoke checks | Monitored deployment and degraded-service operations |
+| Identity and tenant boundaries | 178 backend tests with Mongo; cookie/origin/CSRF, MFA, disable/reactivate, membership and token tests | Reset/verification, invitations/OIDC and project ACL |
+| Core workflow | Chromium against actual non-root Nginx/API/Mongo; synthetic imports/evidence/remediation/PDF/retest | More large datasets, error/accessibility review and upstream schema variants |
+| Scanner safety | Exact scope/window/profile, pinned transport, timeout/cancel regression and training target | Broader sandboxing and durable worker ownership |
+| Reports/evidence | Checksums, ready-state guards, versioned source snapshots, PDF visual review | Complete-set and size limits still apply; retention/quotas/malware controls |
+| Deployment topology | Explicit one-API-worker contract | Distributed assessment ownership and membership mutation coordination are blocking before multiple workers |
+| Data operations | Integration secrets and MFA secrets use optional encryption keys | Key rewrapping, retention, backup/restore drills and tamper-proof audit storage |
+| Integrations | Mocked safe webhook delivery and optional provider contracts | No live provider/destination acceptance; native ticket/chat/email adapters remain |
+| Release operations | CI, images and synthetic acceptance | Upgrade/restore/rollback drills, monitoring/alerting and release/version policy |
 
-A limited local demonstration can be considered only after startup and the selected demonstrated workflows actually pass. Use synthetic data, explicit local configuration and a single worker; clearly label remaining coverage. Do not present the prototype as a verified enterprise deployment.
+Account disable and membership removal block subsequent authenticated operations; requests and organization jobs already in progress may finish. Archive is project metadata and does not revoke scope. Accepted risk remains open in overview counts. Imported assertions and AI interpretation are not verified findings; absence on retest is not proof of resolution.
 
-## Release evidence checklist
-
-- Record branch, commit, PR and CI links; do not invent review/publication evidence.
-- Record test commands/results/environment and known skipped checks.
-- Confirm no secrets, real customer evidence or unauthorized live scans in repository/artifacts.
-- Confirm critical/security regressions and data integrity defects are addressed.
-- Confirm Windows/local and Linux deployment instructions match validated commands.
-- Obtain explicit approval for a sensitive deployment or release publication; ordinary development/PR work may continue autonomously.
-
-Verified Docker evidence: [run 38691459505](https://github.com/ibrahim1101/vapt-x/actions/runs/38691459505) built the API image, started healthy MongoDB/API containers, checked non-root UID/dependencies, and cleaned up. Backend [run 38691459362](https://github.com/ibrahim1101/vapt-x/actions/runs/38691459362) passed 54 tests on Python 3.11 and 3.12, including exports. No production deployment has been performed.
-
-Continuation evidence: all four workflows at `ee7da7e`, including Chromium, succeeded. Project management and expanded browser coverage added afterward await new CI; production release decision remains unchanged.
+No production deployment, merge or release has been performed. Use synthetic data for demonstrations and retain the supported single-worker topology. Readiness requires evidence for the remaining operational gates, not merely a successful build.
