@@ -281,7 +281,7 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   for (const [scanner, fixture, expectedCount=1] of [
     ['gitleaks', [{RuleID:'synthetic-secret-rule',File:'fixture.env',StartLine:1,Description:'Synthetic secret candidate',Secret:'synthetic-secret-do-not-store',Match:'KEY=synthetic-secret-do-not-store'}]],
     ['checkov', {results:{failed_checks:[{check_id:'CKV_SYNTHETIC_1',check_name:'Synthetic IaC check',file_path:'fixture.tf',file_line_range:[1,2],code_block:[[1,'synthetic-secret-do-not-store']]}]}}],
-    ['trivy', {Results:[{Target:'synthetic.tf',Misconfigurations:[{ID:'AVD-SYNTHETIC-1',Title:'Synthetic Trivy policy',Status:'FAIL',Severity:'MEDIUM',Description:'Synthetic policy guidance',CauseMetadata:{StartLine:1,EndLine:1,Code:{Lines:[{Content:'synthetic-secret-do-not-store'}]}}}],Secrets:[{RuleID:'synthetic-key',Severity:'HIGH',StartLine:2,EndLine:2,Match:'synthetic-secret-do-not-store',Code:{Lines:[{Content:'synthetic-secret-do-not-store'}]}}]}]}, 2],
+    ['trivy', {Results:[{Target:'synthetic.tf',Type:'debian',Vulnerabilities:[{VulnerabilityID:'CVE-2099-0002',PkgName:'fixture-library',InstalledVersion:'1.0',FixedVersion:'1.1',Severity:'LOW',Description:'Synthetic package assertion',References:['https://fixture.invalid/advisory'],CVSS:{nvd:{V3Vector:'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',V3Score:9.8}}}],Misconfigurations:[{ID:'AVD-SYNTHETIC-1',Title:'Synthetic Trivy policy',Status:'FAIL',Severity:'MEDIUM',Description:'Synthetic policy guidance',CauseMetadata:{StartLine:1,EndLine:1,Code:{Lines:[{Content:'synthetic-secret-do-not-store'}]}}}],Secrets:[{RuleID:'synthetic-key',Severity:'HIGH',StartLine:2,EndLine:2,Match:'synthetic-secret-do-not-store',Code:{Lines:[{Content:'synthetic-secret-do-not-store'}]}}]}]}, 3],
     ['mobsf', {package_name:'com.synthetic.browser',version:'4.4.0',secrets:['synthetic-secret-do-not-store'],code_analysis:{findings:{android_synthetic:{metadata:{severity:'warning',description:'Synthetic mobile code policy'},files:{'src/Fixture.java':'3,7'}}}},manifest_analysis:{manifest_findings:[{rule:'synthetic_manifest',severity:'high',title:'Synthetic mobile manifest policy',description:'Synthetic policy assertion',component:['.FixtureActivity']}] }}, 2],
     ['prowler', [{Id:'synthetic-asff',GeneratorId:'prowler-synthetic_policy',ProductArn:'arn:aws:securityhub:us-east-1::product/prowler/prowler',AwsAccountId:'000000000000',Title:'Synthetic cloud policy',Description:'Synthetic imported policy failure',Severity:{Label:'HIGH'},Compliance:{Status:'FAILED'},Resources:[{Id:'arn:aws:s3:::synthetic-bucket',Type:'AwsS3Bucket',Region:'us-east-1',Tags:{private:'synthetic-secret-do-not-store'}}]}]],
   ]) {
@@ -294,6 +294,17 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
     expect(imported.raw_output).not.toContain('synthetic-secret-do-not-store');
   }
 
+
+  await page.getByTestId('nav-findings').click();
+  await page.getByTestId('findings-table').locator('tbody tr').filter({hasText:'CVE-2099-0002 · fixture-library'}).click();
+  await expect(page.getByTestId('finding-scanner-facts')).toContainText('CVSS 3.1: 9.8');
+  await expect(page.getByTestId('finding-scanner-facts')).toContainText('Installed version1.0');
+  await expect(page.getByTestId('finding-scanner-facts')).toContainText('not recalculated');
+  await page.getByRole('button', {name:'Close',exact:true}).click();
+  await page.getByTestId('findings-table').locator('tbody tr').filter({hasText:'Synthetic mobile manifest policy'}).click();
+  await expect(page.getByTestId('finding-import-details')).toContainText('com.synthetic.browser');
+  await page.getByRole('button', {name:'Close',exact:true}).click();
+  await page.getByTestId('nav-assessments').click();
 
   for (const [format, fixture] of [
     ['openapi',{openapi:'3.1.0',paths:{'/synthetic':{get:{summary:'Synthetic operation'}}}}],

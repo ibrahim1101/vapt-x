@@ -90,6 +90,12 @@ def build_pdf(project, assessment, findings, jobs, evidence, scopes, tasks, opti
         story.extend([Spacer(1, 16), p("Finding details", "Heading2")])
     for number, finding in enumerate([] if options.template=="executive" else findings, 1):
         story.extend([KeepTogether([Spacer(1, 14), p(f"{number:02}. {finding['title']}", "Heading3"), p(f"{finding['severity'].upper()} | {finding['status']} | {finding['verification']} | {finding['scanner']}", "TinyText")]), p(f"Target: {finding['target']}", "TinyText"), p(finding["description"][:12000] if options.template=="technical" else "Observation details are retained in the immutable source snapshot."), Spacer(1, 6), p("Remediation", "Heading4"), p(finding["remediation"]), p(f"Analyst notes: {finding.get('notes') or 'None'}", "TinyText")])
+        if finding.get('package_info'):
+            package=finding['package_info']
+            story.append(p(f"Scanner package: {package.get('name','')} | installed: {package.get('installed_version') or 'not reported'} | fixed: {package.get('fixed_version') or 'not reported'} | ecosystem: {package.get('ecosystem') or 'not reported'}. Version ordering/applicability is not evaluated.", "TinyText"))
+        for score in finding.get('scanner_cvss', []):
+            story.append(p(f"Scanner-provided CVSS {score['version']}: {score.get('score') if score.get('score') is not None else 'score not supplied'} | {score['source']} | {score['vector']}. Score/vector consistency is not recalculated.", "TinyText"))
+
         for item in evidence:
             if item["finding_id"] == finding["id"] and item["status"] == "ready":
                 story.append(p(f"Evidence: {item['filename']} · SHA-256 {item['sha256']}", "TinyText"))
@@ -125,7 +131,7 @@ def snapshot_bytes(sources, options):
     data={"schema_version":1,"generated_at":iso(),"options":options.model_dump(),
         "project":{key:project.get(key) for key in ("id","name","description")},
         "assessment":{key:assessment.get(key) for key in ("id","name","status","baseline_id","asset_ids")},
-        "findings":fields(findings,('id','title','severity','status','verification','source','scanner','target','rule_id','description','remediation','notes','owner','cve_ids','cwe_ids','created_at')),
+        "findings":fields(findings,('id','title','severity','status','verification','source','scanner','target','rule_id','description','remediation','notes','owner','cve_ids','cwe_ids','finding_type','import_metadata','scanner_cvss','package_info','reference_urls','created_at')),
         "jobs":fields(jobs,('id','scanner','source','status','finding_count','checks','error','inventory_count')),
         "evidence":fields(evidence,('id','finding_id','filename','status','size','sha256')),
         "scopes":fields(scopes,('id','target','authorization_reference','starts_at','ends_at','authorized','allowed_scanners','revoked_at')),
@@ -210,13 +216,14 @@ async def download_report(report_id: str, ctx=Depends(get_ctx)):
 EXPORT_FIELDS = (
     'id', 'title', 'severity', 'status', 'verification', 'source', 'scanner',
     'target', 'asset_id', 'assessment_id', 'project_id', 'rule_id',
-    'description', 'remediation', 'notes', 'created_at',
+    'description', 'remediation', 'notes', 'created_at', 'cve_ids', 'cwe_ids',
+    'finding_type', 'import_metadata', 'scanner_cvss', 'package_info', 'reference_urls',
 )
 
 
 def csv_cell(value):
     """Prevent imported text from becoming spreadsheet formulas on CSV open."""
-    text = '' if value is None else str(value)
+    text = '' if value is None else json.dumps(value, ensure_ascii=False, sort_keys=True) if isinstance(value, (dict, list)) else str(value)
     if text.lstrip().startswith(('=', '+', '-', '@')) or text.startswith(('\t', '\r', '\n')):
         return "'" + text
     return text

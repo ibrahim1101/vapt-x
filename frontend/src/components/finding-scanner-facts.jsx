@@ -1,0 +1,5 @@
+export function FindingScannerFacts({finding}) {
+  const packageInfo=finding.package_info,scores=finding.scanner_cvss||[],references=finding.reference_urls||[];
+  if(!packageInfo&&!scores.length&&!references.length)return null;
+  return <section className="section-gap" data-testid="finding-scanner-facts"><h3>Scanner-provided facts</h3><p className="muted tiny">Separate from scanner severity and analyst triage. Scores are source assertions; score/vector consistency, package version ordering and fix applicability are not recalculated.</p>{packageInfo&&<dl>{[['name','Package'],['ecosystem','Ecosystem'],['installed_version','Installed version'],['fixed_version','Fixed version'],['path','Package path']].map(([key,label])=><div key={key}><dt>{label}</dt><dd>{packageInfo[key]||'Not reported'}</dd></div>)}</dl>}{scores.map((score,index)=><div key={index}><strong>CVSS {score.version}: {score.score??'Score not supplied'}</strong><p>{score.source}</p><code>{score.vector}</code></div>)}{references.map(url=><p key={url}><a href={url} target="_blank" rel="noopener noreferrer">{url}</a></p>)}</section>;
+}

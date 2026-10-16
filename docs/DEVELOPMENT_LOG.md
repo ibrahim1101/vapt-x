@@ -301,3 +301,7 @@ Implemented Prowler ASFF failed resource imports and Trivy mixed vulnerability/m
 ## MobSF Android static import continuation
 
 Continued after the cloud/configuration push with an Android static JSON adapter, separate code/manifest provenance, canonical file/line identity, secure/good omission, mobile/cloud report-association asset labels and frontend source details. Extended real-Mongo import acceptance and Chromium fixtures for the third adapter. Focused parser validation: 32 passed, 100 subtests; frontend/E2E syntax and whitespace checks passed. No APK, cloud credential or external scanner execution was introduced. Full CI acceptance pending.
+
+## Structured scanner scoring/package facts continuation
+
+Continued after the MobSF push with syntax-validated CVSS 3.0/3.1/4.0 source facts for Trivy and Nuclei, explicit classification IDs, safe reference URLs and structured installed/fixed package version strings. Added distinct source-facts UI, source metadata in immutable report snapshots, PDF fact labels and additive JSON/CSV export columns. Scores are not recomputed and neither fix applicability nor version ordering is inferred. Parser/report/export/frontend tests and real-Mongo/browser acceptance were extended; CI evidence follows after completion.

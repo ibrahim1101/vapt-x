@@ -163,7 +163,8 @@ def parse_report(scanner, content):
             info = _object(x.get("info"), "Nuclei info")
             detail = _text(info.get("description"), "Nuclei description")
             extracted = _array(x.get("extracted-results", []), "Nuclei extracted-results", nullable=True)
-            append(finding(_text(info.get("name"), "Nuclei name", rule), info.get("severity", "info"), rule, _text(x.get("matched-at", x.get("host")), "Nuclei target"), detail + "\n" + json.dumps(extracted)))
+            from scanner_facts import nuclei_facts
+            append(nuclei_facts(finding(_text(info.get("name"), "Nuclei name", rule), info.get("severity", "info"), rule, _text(x.get("matched-at", x.get("host")), "Nuclei target"), detail + "\n" + json.dumps(extracted)), info))
         return rows
     data = _object(_json(content), f"{scanner} report")
     if scanner == "semgrep":
@@ -184,7 +185,8 @@ def parse_report(scanner, content):
                 x = _object(item, "Trivy vulnerability")
                 rule = _required(x.get("VulnerabilityID"), "Trivy VulnerabilityID")
                 package = _text(x.get("PkgName"), "Trivy PkgName")
-                append(finding(f"{rule} · {package}", x.get("Severity", "info"), rule + ":" + package, _text(group.get("Target"), "Trivy Target"), _text(x.get("Description"), "Trivy Description", _text(x.get("Title"), "Trivy Title")), f"Installed: {x.get('InstalledVersion') or 'unknown'}. Fixed version: {x.get('FixedVersion') or 'No fixed version reported'}"))
+                from scanner_facts import trivy_facts
+                append(trivy_facts(finding(f"{rule} · {package}", x.get("Severity", "info"), rule + ":" + package, _text(group.get("Target"), "Trivy Target"), _text(x.get("Description"), "Trivy Description", _text(x.get("Title"), "Trivy Title")), f"Installed: {x.get('InstalledVersion') or 'unknown'}. Fixed version: {x.get('FixedVersion') or 'No fixed version reported'}"), group, x))
         from import_extensions import trivy_extras, redact_known
         matches = trivy_extras(data, append)
         rows = redact_known(rows, matches)

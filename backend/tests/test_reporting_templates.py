@@ -23,6 +23,22 @@ class ReportingTemplateTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(snapshot['options']['template'],template)
             self.assertEqual(snapshot['findings'][0]['verification'],'imported-unverified')
             self.assertNotIn('must-not-enter-snapshot',json.dumps(snapshot))
+    def test_structured_scanner_facts_survive_snapshots_and_json_csv_cells(self):
+        import copy
+        from test_scanner_facts import TRIVY_FACTS
+        from importers import parse_report
+        sources=copy.deepcopy(SOURCES)
+        finding=sources[2][0]
+        finding.update(parse_report('trivy',json.dumps(TRIVY_FACTS))[0])
+        finding['import_metadata']={'format':'synthetic-import'}
+        options=reporting.ReportOptions()
+        snapshot=json.loads(reporting.snapshot_bytes(sources,options))['findings'][0]
+        self.assertEqual(snapshot['package_info']['fixed_version'],'1.1')
+        self.assertEqual(snapshot['scanner_cvss'][1]['version'],'4.0')
+        self.assertEqual(snapshot['import_metadata']['format'],'synthetic-import')
+        self.assertEqual(json.loads(reporting.csv_cell(snapshot['scanner_cvss'])),snapshot['scanner_cvss'])
+        self.assertTrue(reporting.build_pdf(*sources,options).startswith(b'%PDF-'))
+
     def test_template_and_section_validation(self):
         for body in ({'template':'fake'},{'branding':'x'*101},{'sections':[{'heading':'Header','text':'x'}]*11}):
             with self.assertRaises(ValidationError):reporting.ReportOptions(**body)
