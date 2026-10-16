@@ -4,7 +4,7 @@ import { apiBaseUrl } from './api-config';
 export const api = axios.create({ baseURL: apiBaseUrl(process.env.REACT_APP_BACKEND_URL), withCredentials: true });
 let credentialGeneration = 0;
 const credentialChanges = new Set();
-const rotatesCredentials = url => /^\/auth\/(?:password|mfa\/(?:confirm|disable|recovery-codes))$/.test(url || '');
+const rotatesCredentials = url => /^\/auth\/(?:oidc\/unlink|password|mfa\/(?:confirm|disable|recovery-codes))$/.test(url || '');
 function settleCredentialChange(config, succeeded) {
   const change = config?._credentialChange;
   if (!change || change.done) return;
@@ -41,7 +41,7 @@ api.interceptors.response.use(response => {
   // A failed rotation must release readers too; its own 401 can then refresh normally.
   settleCredentialChange(original, false);
   const retryableUrl = typeof original?.url === 'string' && (
-    !original.url.startsWith('/auth/') || (/^\/auth\/(?:sessions|mfa|password|security-events)(?:\/|\?|$)/.test(original.url) || (/^\/auth\/email-verification(?:\/request)?$/.test(original.url) || /^\/auth\/invitations(?:\/(?:accept|preview))?$/.test(original.url)))
+    !original.url.startsWith('/auth/') || (/^\/auth\/(?:sessions|mfa|password|security-events)(?:\/|\?|$)/.test(original.url) || (/^\/auth\/oidc\/(?:link(?:\/start)?|unlink)$/.test(original.url) || /^\/auth\/email-verification(?:\/request)?$/.test(original.url) || /^\/auth\/invitations(?:\/(?:accept|preview))?$/.test(original.url)))
   );
   if (error.response?.status === 401 && retryableUrl && !original._retried) {
     original._retried = true;

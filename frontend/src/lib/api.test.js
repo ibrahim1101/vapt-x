@@ -166,3 +166,9 @@ test('verification-required responses refresh account state without logging out'
   expect(api.post).not.toHaveBeenCalled();expect(errorText(failure)).toBe('Verify your registered email.');
  }finally{window.removeEventListener('vaptx-verification-required',listener);window.removeEventListener('vaptx-session-expired',expired);}
 });
+
+test('identity unlink coordinates credential rotation with background reads',async()=>{
+ const read=requestHandler({url:'/workspace',headers:{}}),unlink=requestHandler({url:'/auth/oidc/unlink',method:'post',headers:{}});
+ api.mockResolvedValue({data:'current-session'});const pending=errorHandler({response:{status:401},config:read});
+ successHandler({config:unlink});await expect(pending).resolves.toEqual({data:'current-session'});expect(api.post).not.toHaveBeenCalled();
+});

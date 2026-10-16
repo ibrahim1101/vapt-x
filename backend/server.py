@@ -38,6 +38,9 @@ async def lifespan(app):
         await db.findings.create_index([('org_id', 1), ('project_id', 1), ('created_at', -1), ('_id', -1)])
         await db.webhook_deliveries.create_index([('status',1),('next_attempt_at',1),('lease_expires_at',1),('created_at',1)])
         await db.webhook_deliveries.create_index([('org_id',1),('webhook_id',1),('created_at',-1)])
+        await db.oidc_flows.create_index('expires_at',expireAfterSeconds=0)
+        await db.oidc_challenges.create_index('expires_at',expireAfterSeconds=0)
+        await db.users.create_index([('oidc_identity.issuer',1),('oidc_identity.subject',1)],unique=True,partialFilterExpression={'oidc_identity.issuer':{'$type':'string'},'oidc_identity.subject':{'$type':'string'}})
         await db.api_tokens.create_index('token_hash',unique=True)
         await db.account_recovery.create_index('token_hash',unique=True)
         await db.account_recovery.create_index('expires_at',expireAfterSeconds=0)
@@ -84,7 +87,7 @@ async def request_security(request: Request, call_next):
 
         if request.headers.get('origin') != origin:
             return JSONResponse({'detail': 'Untrusted request origin'}, status_code=403)
-        if request.url.path not in {'/api/auth/login', '/api/auth/register', '/api/auth/recovery/request', '/api/auth/recovery/complete', '/api/auth/email-verification/confirm'}:
+        if request.url.path not in {'/api/auth/oidc/start', '/api/auth/login', '/api/auth/register', '/api/auth/recovery/request', '/api/auth/recovery/complete', '/api/auth/email-verification/confirm'}:
             csrf = request.cookies.get('csrf', '')
             if not csrf or not secrets.compare_digest(csrf, request.headers.get('x-csrf-token', '')):
                 return JSONResponse({'detail': 'CSRF verification failed'}, status_code=403)
@@ -159,3 +162,6 @@ app.include_router(account_verification_router)
 
 from invitations import router as invitations_router
 app.include_router(invitations_router)
+
+from oidc import router as oidc_router
+app.include_router(oidc_router)

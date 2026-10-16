@@ -14,6 +14,8 @@ class Settings:
     @classmethod
     def from_env(cls, env):
         validate_environment(env)
+        from oidc_config import configuration
+        configuration(env)
         required = ('MONGO_URL', 'DB_NAME', 'JWT_SECRET', 'ADMIN_EMAIL',
                     'ADMIN_PASSWORD', 'FRONTEND_URL', 'INTERNAL_API_URL', 'NMAP_BINARY')
         missing = [key for key in required if not env.get(key, '').strip()]

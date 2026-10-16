@@ -9,6 +9,7 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 - Optional one-use password recovery with TLS mail configuration, MFA preservation, epoch invalidation and browser reset-link handling.
 - Optional registered-email proof and seven-day email-bound invitation lifecycle with explicit preview/acceptance, issuer authority checks and role preservation.
 - Explicit open/invitation-only/closed registration and optional mandatory email proof with limited browser account sessions; stored-session expiry enforced on every browser request.
+- Optional explicitly linked OIDC code sign-in with PKCE, issuer/nonce/signature validation, local MFA and credential-epoch invalidation.
 - Organization role/membership lifecycle, anti-orphan guards, scoped hash-only tokens and membership-lifetime invalidation.
 - Project edits/archive/templates/navigation; asset metadata/bulk registration/navigation/history; assessment cancellation/retry/history/navigation.
 - Finding filters/pagination, bulk triage/owner/history, comments, organization SLA policy, remediation edits and coverage-aware retests.
@@ -20,7 +21,7 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 
 ## Next implementation order
 
-1. Add optional OIDC. Preserve current MFA, admission policy and credential epoch/token invalidation semantics.
+1. Broaden synthetic OIDC provider compatibility and operational acceptance. Explicit linking is implemented; discovery, provisioning, forced SSO and provider lifecycle synchronization remain separate work.
 2. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
 3. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
 4. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.
