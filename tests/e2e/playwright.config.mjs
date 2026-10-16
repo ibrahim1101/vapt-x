@@ -17,7 +17,8 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
+  // CI tests the actual Compose Nginx service; local source runs retain the proxy.
+  webServer: process.env.VAPTX_E2E_EXTERNAL_SERVER === '1' ? undefined : {
     command: 'node server.mjs',
     url: 'http://localhost:3000',
     reuseExistingServer: false,
