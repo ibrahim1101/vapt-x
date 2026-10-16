@@ -465,5 +465,15 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await page.getByTestId('field-members-search').fill('');
   await page.getByTestId('field-members-role').selectOption('org_admin');
   await expect(page.getByTestId('members-table')).toContainText(email);
+  await page.getByTestId('logout').click();
+  await page.goto('/#reset_token='+('invalid-synthetic-token-'.repeat(2)));
+  await expect(page.getByTestId('field-new_password')).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>window.location.hash)).toBe('');
+  await page.getByTestId('field-new_password').fill('synthetic-invalid-reset-password');
+  await page.getByTestId('field-confirm_password').fill('synthetic-invalid-reset-password');
+  await page.getByTestId('form-submit').click();
+  await expect(page.getByRole('alert')).toContainText('invalid, expired or already used');
+  await page.getByTestId('recovery-back').click();
+  await expect(page.getByTestId('field-password')).toBeVisible();
   expect(pageErrors).toEqual([]);
 });

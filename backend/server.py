@@ -25,6 +25,8 @@ from webhooks import router as webhooks_router,configured as webhooks_configured
 async def lifespan(app):
     webhook_worker=None
     try:
+        from account_recovery import mail_configuration
+        mail_configuration()  # Enabled mail delivery must be valid before accepting requests.
         await db.command('ping')
         await seed_admin()
         await db.sessions.create_index([('user_id', 1), ('revoked', 1), ('created_at', -1)])
@@ -35,6 +37,8 @@ async def lifespan(app):
         await db.webhook_deliveries.create_index([('status',1),('next_attempt_at',1),('lease_expires_at',1),('created_at',1)])
         await db.webhook_deliveries.create_index([('org_id',1),('webhook_id',1),('created_at',-1)])
         await db.api_tokens.create_index('token_hash',unique=True)
+        await db.account_recovery.create_index('token_hash',unique=True)
+        await db.account_recovery.create_index('expires_at',expireAfterSeconds=0)
         await db.api_tokens.create_index([('org_id',1),('created_by',1),('revoked',1),('expires_at',1)])
         await db.sla_policies.create_index('org_id',unique=True)
         await db.finding_comments.create_index([('org_id',1),('finding_id',1),('created_at',-1),('_id',-1)])
@@ -73,7 +77,7 @@ async def request_security(request: Request, call_next):
 
         if request.headers.get('origin') != origin:
             return JSONResponse({'detail': 'Untrusted request origin'}, status_code=403)
-        if request.url.path not in {'/api/auth/login', '/api/auth/register'}:
+        if request.url.path not in {'/api/auth/login', '/api/auth/register', '/api/auth/recovery/request', '/api/auth/recovery/complete'}:
             csrf = request.cookies.get('csrf', '')
             if not csrf or not secrets.compare_digest(csrf, request.headers.get('x-csrf-token', '')):
                 return JSONResponse({'detail': 'CSRF verification failed'}, status_code=403)
@@ -139,3 +143,6 @@ app.include_router(audit_navigation_router)
 
 from register_navigation import router as register_navigation_router
 app.include_router(register_navigation_router)
+
+from account_recovery import router as account_recovery_router
+app.include_router(account_recovery_router)
