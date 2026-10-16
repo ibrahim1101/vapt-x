@@ -122,7 +122,7 @@ async def get_current_user(request: Request) -> dict:
         user=await db.users.find_one({"_id":token["created_by"]})
         if not user or user.get("disabled") or user.get("credential_version",0)!=token.get("credential_version",0):raise HTTPException(401,"Token owner credentials changed")
         user=clean(user)
-        user.update(_token_scopes=token["scopes"],_token_org=token["org_id"],_api_token_id=str(token["_id"]))
+        user.update(_token_scopes=token["scopes"],_token_org=token["org_id"],_api_token_id=str(token["_id"]),_token_membership_id=token.get("membership_id"))
         request.state.api_user=user
         return user
     token = request.cookies.get("access_token")
@@ -153,6 +153,7 @@ class Ctx:
         self.org_id = org_id
         self.role = role
         self.scopes = user.get("_token_scopes")
+        self.membership_id = None
 
     def can(self, perm: str) -> bool:
         if self.scopes is not None and perm not in self.scopes and "*" not in self.scopes:
@@ -176,7 +177,14 @@ async def get_ctx(request: Request) -> Ctx:
     m = await db.memberships.find_one({"org_id": org_id, "user_id": user["id"]})
     if not m:
         raise HTTPException(404, "Organization not found")
-    return Ctx(user, org_id, m["role"])
+    if user.get("_token_membership_id") and user["_token_membership_id"]!=str(m.get("_id")):
+        raise HTTPException(401,"API token membership changed")
+    if user.get("_api_token_id") and not user.get("_token_membership_id"):
+        if await db.membership_revocations.find_one({"_id":org_id+":"+user["id"]}):
+            raise HTTPException(401,"Legacy API token membership was removed")
+    ctx=Ctx(user,org_id,m["role"])
+    ctx.membership_id=str(m["_id"]) if m.get("_id") else None
+    return ctx
 
 
 async def get_one(coll: str, ctx: Ctx, oid: str):

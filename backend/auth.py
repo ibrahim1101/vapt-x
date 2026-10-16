@@ -1,4 +1,5 @@
 import os
+import asyncio
 import secrets
 import logging
 import hashlib
@@ -12,6 +13,8 @@ from core import (db, BaseDocument, clean, iso, now, new_id, hash_password, veri
                   create_access_token, create_refresh_token, decode_token, get_current_user, get_ctx, Ctx, audit, ROLES)
 
 router = APIRouter(prefix="/api")
+# The application currently requires one API worker (scanner ownership is also local).
+MEMBER_LOCK = asyncio.Lock()
 
 
 class Credentials(BaseModel):
@@ -169,7 +172,9 @@ async def me(user=Depends(get_current_user)):
         org = await db.organizations.find_one({"_id": m["org_id"]})
         if org:
             orgs.append({"id": str(org["_id"]), "name": org["name"], "role": m["role"]})
-    return {**public_user(user), "organizations": orgs}
+    active=user.get("active_org_id")
+    if active not in {org["id"] for org in orgs}:active=orgs[0]["id"] if orgs else None
+    return {**public_user(user), "active_org_id":active, "organizations": orgs}
 
 
 @router.post("/auth/refresh")
@@ -306,16 +311,57 @@ async def members(ctx=Depends(get_ctx)):
     return result
 
 
+async def live_membership_admin(ctx):
+    ctx.require("members")
+    actor=await db.memberships.find_one({"org_id":ctx.org_id,"user_id":ctx.uid,"role":"org_admin"})
+    if not actor: raise HTTPException(403,"Organization administrator permission changed; reload your workspace")
+
+
 @router.post("/members")
 async def grant_member(body: MemberInput, ctx=Depends(get_ctx)):
     ctx.require("members")
-    if body.role not in ROLES:
-        raise HTTPException(422, "Unknown organization role")
-    user = await db.users.find_one({"email": str(body.email).lower()})
-    if not user:
-        raise HTTPException(404, "User must register before being added")
-    if str(user["_id"]) == ctx.uid and body.role != "org_admin":
-        raise HTTPException(400, "You cannot demote yourself")
-    await db.memberships.update_one({"org_id": ctx.org_id, "user_id": str(user["_id"])}, {"$set": {"role": body.role}, "$setOnInsert": {"_id": new_id()}}, upsert=True)
-    await audit(ctx, "membership.granted", "users", str(user["_id"]), {"role": body.role})
-    return {"ok": True}
+    if body.role not in ROLES: raise HTTPException(422,"Unknown organization role")
+    async with MEMBER_LOCK:
+        await live_membership_admin(ctx)
+        user=await db.users.find_one({"email":str(body.email).lower()})
+        if not user: raise HTTPException(404,"User must register before being added")
+        if str(user["_id"])==ctx.uid and body.role!="org_admin": raise HTTPException(400,"You cannot demote yourself")
+        target=await db.memberships.find_one({"org_id":ctx.org_id,"user_id":str(user["_id"])})
+        if target and target["role"]=="org_admin" and body.role!="org_admin" and await db.memberships.count_documents({"org_id":ctx.org_id,"role":"org_admin"})<=1:
+            raise HTTPException(409,"An organization must retain an administrator")
+        await db.memberships.update_one({"org_id":ctx.org_id,"user_id":str(user["_id"])},
+            {"$set":{"role":body.role},"$setOnInsert":{"_id":new_id()}},upsert=True)
+        await audit(ctx,"membership.granted","users",str(user["_id"]),{"role":body.role})
+    return {"ok":True}
+
+
+class MemberRemoval(BaseModel):
+    reason:str=Field(min_length=5,max_length=500)
+    @field_validator("reason")
+    @classmethod
+    def meaningful(cls,value):
+        if len(value.strip())<5:raise ValueError("Provide a reason of at least five characters")
+        return value.strip()
+
+
+@router.post("/members/{user_id}/remove")
+async def remove_member(user_id:str,body:MemberRemoval,ctx=Depends(get_ctx)):
+    ctx.require("members")
+    if user_id==ctx.uid:raise HTTPException(409,"You cannot remove your own organization membership")
+    async with MEMBER_LOCK:
+        await live_membership_admin(ctx)
+        membership=await db.memberships.find_one({"org_id":ctx.org_id,"user_id":user_id})
+        if not membership:raise HTTPException(404,"Organization membership not found")
+        if membership["role"]=="org_admin" and await db.memberships.count_documents({"org_id":ctx.org_id,"role":"org_admin"})<=1:
+            raise HTTPException(409,"An organization must retain an administrator")
+        # A retained marker also blocks unbound tokens issued before membership binding existed.
+        # Write it before deletion so a partial cleanup failure cannot revive a legacy token.
+        await db.membership_revocations.update_one({"_id":ctx.org_id+":"+user_id},
+            {"$set":{"removed_at":iso()}},upsert=True)
+        removed=await db.memberships.delete_one({"_id":membership["_id"],"org_id":ctx.org_id,"user_id":user_id})
+        if not removed.deleted_count:raise HTTPException(409,"Membership changed; reload before trying again")
+        await db.api_tokens.update_many({"org_id":ctx.org_id,"created_by":user_id,"revoked":False},
+            {"$set":{"revoked":True,"revoked_at":iso()}})
+        await db.users.update_one({"_id":user_id,"active_org_id":ctx.org_id},{"$set":{"active_org_id":None}})
+        await audit(ctx,"membership.removed","users",user_id,{"reason":body.reason})
+    return {"ok":True,"notice":"Organization access removed and its API tokens revoked. The account and memberships in other organizations are retained. Requests already in progress may finish."}

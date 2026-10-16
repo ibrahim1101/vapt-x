@@ -26,5 +26,14 @@ test('platform owner disables and reactivates a synthetic account',async({browse
   await expect(ownerPage.getByTestId(`change-account-${target.id}`)).toHaveText('Reactivate account');
   await ownerPage.getByTestId(`change-account-${target.id}`).click();modal=ownerPage.getByTestId('workspace-modal');await modal.getByTestId('field-current_password').fill('ci-only-synthetic-password');await modal.getByTestId('field-reason').fill('Synthetic reactivation fixture');await submit(ownerPage,`/platform/accounts/${target.id}/state`);
   await expect(modal).toBeHidden();await targetPage.getByTestId('field-email').fill(email);await targetPage.getByTestId('field-password').fill(password);await submit(targetPage,'/auth/login');await expect(targetPage.getByTestId('organization-select')).toBeVisible();
+  const ownerOrg=await ownerPage.getByTestId('organization-select').inputValue();
+  await ownerPage.getByTestId('add-member').click();modal=ownerPage.getByTestId('workspace-modal');
+  await modal.getByTestId('field-email').fill(email);await modal.getByTestId('field-role').selectOption('viewer');await submit(ownerPage,'/members');await expect(modal).toBeHidden();
+  const permitted=await targetPage.evaluate(async orgId=>(await fetch('/api/workspace',{headers:{'X-Org-Id':orgId}})).status,ownerOrg);expect(permitted).toBe(200);
+  await ownerPage.getByTestId(`remove-member-${target.id}`).click();modal=ownerPage.getByTestId('workspace-modal');await modal.getByTestId('field-reason').fill('Synthetic membership removal');await submit(ownerPage,`/members/${target.id}/remove`);await expect(modal).toBeHidden();
+  await expect(ownerPage.getByTestId(`members-row-${target.id}`)).toHaveCount(0);
+  const removed=await targetPage.evaluate(async orgId=>(await fetch('/api/workspace',{headers:{'X-Org-Id':orgId}})).status,ownerOrg);expect(removed).toBe(404);
+  await targetPage.reload();await expect(targetPage.getByTestId('organization-select')).toBeVisible();
+
  }finally{await targetContext.close();await ownerContext.close();}
 });
