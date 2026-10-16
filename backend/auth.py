@@ -1,4 +1,6 @@
 import os
+import re
+from typing import Literal
 import asyncio
 import secrets
 import logging
@@ -309,6 +311,34 @@ async def members(ctx=Depends(get_ctx)):
         if u:
             result.append({"id": m["user_id"], "name": u.get("name"), "email": u["email"], "role": m["role"]})
     return result
+
+
+@router.get('/members/directory')
+async def member_directory(search: str = Query(default='',max_length=120),
+    role: Literal['org_admin','security_lead','analyst','auditor','viewer'] | None = None,
+    offset: int = Query(default=0,ge=0,le=1_000_000),limit: int = Query(default=25,ge=1,le=100),ctx=Depends(get_ctx)):
+    ctx.require('read')
+    match = {'org_id':ctx.org_id}
+    if role: match['role'] = role
+    pipeline = [
+        {'$match':match},
+        {'$lookup':{'from':'users','localField':'user_id','foreignField':'_id',
+                    'pipeline':[{'$project':{'name':1,'email':1}}],'as':'account'}},
+        {'$unwind':'$account'},
+    ]
+    if search.strip():
+        pipeline.append({'$match':{'$or':[{key:{'$regex':re.escape(search.strip()),'$options':'i'}}
+                                        for key in ('account.name','account.email')]}})
+    pipeline.append({'$facet':{
+        'count':[{'$count':'total'}],
+        'items':[{'$sort':{'account.email':1,'_id':1}},{'$skip':offset},{'$limit':limit},
+                 {'$project':{'_id':0,'id':'$user_id','name':'$account.name','email':'$account.email','role':1}}],
+    }})
+    rows = await db.memberships.aggregate(pipeline).to_list(1)
+    result = rows[0] if rows else {'count':[],'items':[]}
+    total = result['count'][0]['total'] if result['count'] else 0
+    return {'items':result['items'],'total':total,'offset':offset,'limit':limit,
+            'has_more':offset+len(result['items'])<total}
 
 
 async def live_membership_admin(ctx):

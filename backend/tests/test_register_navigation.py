@@ -30,3 +30,8 @@ class RegisterNavigationTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(navigation,'metadata_page',new_callable=AsyncMock) as page:
             await navigation.scopes_page(None,'',False,0,25,Ctx({'id':'u'},'tenant','viewer'))
             self.assertEqual(page.call_args.args[4],{'authorized':False})
+
+    def test_report_list_route_is_registered_only_once(self):
+        from server import app
+        routes=[route for route in app.routes if getattr(route,'path',None)=='/api/reports' and 'GET' in getattr(route,'methods',set())]
+        self.assertEqual(len(routes),1)

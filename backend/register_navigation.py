@@ -35,10 +35,14 @@ async def evidence_page(project_id: str | None = None, search: str = Query(defau
     return await metadata_page('evidence',ctx,project_id,search,{'status':status} if status else {},offset,limit)
 
 @router.get('/reports')
-async def reports_page(project_id: str | None = None, search: str = Query(default='',max_length=120),
+async def reports_page(project_id: str | None = None, assessment_id: str | None = None, search: str = Query(default='',max_length=120),
     status: Literal['generating','ready'] | None = None, template: Literal['technical','executive','remediation'] | None = None,
     offset: int = Query(default=0,ge=0,le=1_000_000),limit: int = Query(default=25,ge=1,le=100),ctx=Depends(get_ctx)):
     filters = {}
+    if assessment_id:
+        ctx.require('read')
+        await Repository(ctx).get('assessments',assessment_id)
+        filters['assessment_id'] = assessment_id
     if status: filters['status'] = status
     if template: filters['template'] = template
     return await metadata_page('reports',ctx,project_id,search,filters,offset,limit)

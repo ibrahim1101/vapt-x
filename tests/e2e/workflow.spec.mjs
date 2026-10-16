@@ -459,5 +459,11 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await page.getByTestId('nav-assets-scope').click();
   await page.getByTestId('field-scopes-authorized').selectOption('false');
   await expect(page.getByTestId('scopes-table')).toContainText('Not approved');
+  await page.getByTestId('nav-organization').click();
+  await page.getByTestId('field-members-search').fill('no-such-synthetic-member');
+  await expect(page.getByTestId('members-total')).toContainText('0 matching records');
+  await page.getByTestId('field-members-search').fill('');
+  await page.getByTestId('field-members-role').selectOption('org_admin');
+  await expect(page.getByTestId('members-table')).toContainText(email);
   expect(pageErrors).toEqual([]);
 });

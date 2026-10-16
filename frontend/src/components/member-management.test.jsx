@@ -2,14 +2,15 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemberManagement } from './member-management';
 import { api } from '../lib/api';
-jest.mock('../lib/api',()=>({api:{post:jest.fn()},errorText:error=>error.message}));
+jest.mock('../lib/api',()=>({api:{post:jest.fn(),get:jest.fn()},errorText:error=>error.message}));
 let container,root;
 beforeEach(()=>{global.IS_REACT_ACT_ENVIRONMENT=true;container=document.createElement('div');document.body.appendChild(container);root=createRoot(container);api.post.mockReset().mockResolvedValue({data:{ok:true}});});
 afterEach(()=>{act(()=>root.unmount());container.remove();});
 test('self membership is protected and removing another member requires explicit confirmation',async()=>{
  const refresh=jest.fn().mockResolvedValue();
  const members=[{id:'owner',name:'Owner',email:'owner@example.com',role:'org_admin'},{id:'target',name:'Target',email:'target@example.com',role:'viewer'}];
- await act(async()=>root.render(<MemberManagement members={members} user={{id:'owner'}} org={{name:'Fixture',role:'org_admin'}} refresh={refresh}/>));
+ api.get.mockResolvedValue({data:{items:members,total:2,has_more:false}});
+ await act(async()=>root.render(<MemberManagement members={members} user={{id:'owner'}} org={{name:'Fixture',role:'org_admin'}} refresh={refresh}/>));await act(async()=>new Promise(resolve=>setTimeout(resolve,250)));
  expect(container.querySelector('[data-testid="remove-member-owner"]')).toBeNull();
  await act(async()=>container.querySelector('[data-testid="remove-member-target"]').click());expect(api.post).not.toHaveBeenCalled();
  document.querySelector('[name="reason"]').value='Synthetic reason';

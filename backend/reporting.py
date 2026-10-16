@@ -167,15 +167,6 @@ async def report(assessment_id: str, ctx=Depends(get_ctx), options:ReportOptions
     return result
 
 
-@router.get("/reports")
-async def report_history(assessment_id:str|None=None,offset:int=Query(default=0,ge=0,le=1_000_000),
-    limit:int=Query(default=25,ge=1,le=100),ctx=Depends(get_ctx)):
-    ctx.require("read")
-    repo=Repository(ctx)
-    if assessment_id:await repo.get("assessments",assessment_id)
-    return await repo.page("reports",{"assessment_id":assessment_id} if assessment_id else {},offset=offset,limit=limit)
-
-
 @router.get("/reports/{report_id}/snapshot")
 async def download_snapshot(report_id:str,ctx=Depends(get_ctx)):
     ctx.require("read")

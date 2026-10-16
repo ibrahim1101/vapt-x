@@ -392,6 +392,14 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/scopes',params={'search':'Register literal .*','authorized':'false'}).json()['total']==1005
                     assert client.get('/api/evidence',params={'status':'invalid'}).status_code==422
                     assert client.get('/api/reports',params={'template':'invalid'}).status_code==422
+                    mongo[database].users.insert_many([{'_id':'member-page-'+str(i),'email':'directory'+str(i)+'@example.com',
+                        'name':'Directory literal .*','password_hash':'PRIVATE_FIXTURE'} for i in range(1005)])
+                    mongo[database].memberships.insert_many([{'_id':'membership-page-'+str(i),'user_id':'member-page-'+str(i),
+                        'org_id':org['id'],'role':'viewer'} for i in range(1005)])
+                    directory=client.get('/api/members/directory',params={'search':'Directory literal .*','role':'viewer','offset':1000}).json()
+                    assert directory['total']==1005 and len(directory['items'])==5 and not directory['has_more'],directory
+                    assert all(set(item)=={'id','name','email','role'} for item in directory['items'])
+                    assert client.get('/api/members/directory',params={'role':'invalid'}).status_code==422
                     mongo[database].projects.insert_many([{'_id':'project-page-'+str(i), 'org_id':org['id'],
                         'created_by':user['id'],'created_at':(now-timedelta(days=1)).isoformat(),
                         'name':'Project navigation fixture','status':'active','description':'','owner':'Pagination team'} for i in range(1005)])
@@ -422,6 +430,7 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/tasks',params={'project_id':project['id']}).status_code==404
                     assert client.get('/api/tasks').json()['total']==0
                     assert client.get('/api/jobs').json()['total']==0
+                    assert client.get('/api/members/directory',params={'search':'Directory literal .*'}).json()['total']==0
                     for collection in ('evidence','reports','scopes'):
                         assert client.get('/api/'+collection).json()['total']==0
                         assert client.get('/api/'+collection,params={'project_id':project['id']}).status_code==404
