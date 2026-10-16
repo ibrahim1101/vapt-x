@@ -136,3 +136,6 @@ app.include_router(account_admin_router)
 
 from audit_navigation import router as audit_navigation_router
 app.include_router(audit_navigation_router)
+
+from register_navigation import router as register_navigation_router
+app.include_router(register_navigation_router)

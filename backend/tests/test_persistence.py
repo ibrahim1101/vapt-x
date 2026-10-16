@@ -379,6 +379,19 @@ class PersistenceTests(unittest.TestCase):
                     assert all(row['asset_name']=='Updated asset' and 'raw_output' not in row and 'logs' not in row for row in jobs_page['items'])
                     assert client.get('/api/jobs/job-page-0').json()['logs']==['Historical execution fixture']
                     assert client.get('/api/jobs',params={'source':'invalid'}).status_code==422
+                    for collection,fields in [
+                        ('evidence',{'filename':'Register literal .*','size':10,'status':'ready','sha256':'synthetic','finding_id':finding['id']}),
+                        ('reports',{'name':'Register literal .*','status':'ready','template':'technical','assessment_id':assessment['id']}),
+                        ('scopes',{'target':'training://local','authorization_reference':'Register literal .*','authorized':False,'allowed_scanners':['safe']})]:
+                        mongo[database][collection].insert_many([{'_id':collection+'-page-'+str(i),'org_id':org['id'],
+                            'project_id':project['id'],'created_by':user['id'],'created_at':'2020-01-01T12:00:00+00:00',
+                            'data':'PRIVATE_FIXTURE',**fields} for i in range(1005)])
+                        page=client.get('/api/'+collection,params={'project_id':project['id'],'search':'Register literal .*','offset':1000}).json()
+                        assert page['total']==1005 and len(page['items'])==5 and not page['has_more'],page
+                        assert all('data' not in item for item in page['items'])
+                    assert client.get('/api/scopes',params={'search':'Register literal .*','authorized':'false'}).json()['total']==1005
+                    assert client.get('/api/evidence',params={'status':'invalid'}).status_code==422
+                    assert client.get('/api/reports',params={'template':'invalid'}).status_code==422
                     mongo[database].projects.insert_many([{'_id':'project-page-'+str(i), 'org_id':org['id'],
                         'created_by':user['id'],'created_at':(now-timedelta(days=1)).isoformat(),
                         'name':'Project navigation fixture','status':'active','description':'','owner':'Pagination team'} for i in range(1005)])
@@ -409,6 +422,9 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/tasks',params={'project_id':project['id']}).status_code==404
                     assert client.get('/api/tasks').json()['total']==0
                     assert client.get('/api/jobs').json()['total']==0
+                    for collection in ('evidence','reports','scopes'):
+                        assert client.get('/api/'+collection).json()['total']==0
+                        assert client.get('/api/'+collection,params={'project_id':project['id']}).status_code==404
                     assert client.get('/api/jobs',params={'project_id':project['id']}).status_code==404
                     assert client.get('/api/jobs/job-page-0').status_code==404
                     assert client.get('/api/audit-events',params={'search':'literal .*'}).json()['total']==0

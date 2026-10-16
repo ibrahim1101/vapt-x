@@ -447,5 +447,17 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await page.keyboard.press('Escape');
   await page.getByTestId('field-job-search').fill('no-such-synthetic-job');
   await expect(page.getByTestId('jobs-total')).toContainText('0 matching jobs');
+  await page.getByTestId('nav-evidence').click();
+  await page.getByTestId('field-evidence-search').fill('no-such-synthetic-file');
+  await expect(page.getByTestId('evidence-total')).toContainText('0 matching records');
+  await page.getByTestId('field-evidence-search').fill('');
+  await page.getByTestId('field-evidence-status').selectOption('ready');
+  await expect(page.getByTestId(/^download-evidence-/).first()).toBeEnabled();
+  await page.getByTestId('nav-reports').click();
+  await page.getByTestId('field-reports-template').selectOption('technical');
+  await expect(page.getByTestId('reports-table')).toContainText('technical');
+  await page.getByTestId('nav-assets-scope').click();
+  await page.getByTestId('field-scopes-authorized').selectOption('false');
+  await expect(page.getByTestId('scopes-table')).toContainText('Not approved');
   expect(pageErrors).toEqual([]);
 });
