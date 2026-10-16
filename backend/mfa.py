@@ -95,7 +95,7 @@ async def reauthenticate(body,user,require_mfa=False):
     if user.get('_token_scopes') is not None: raise HTTPException(403,'Use a browser session to manage MFA')
     await charge_attempt(user['id'])
     document=await db.users.find_one({'_id':user['id']})
-    if not document or document.get('credential_version',0)!=user.get('credential_version',0):
+    if not document or document.get('disabled') or document.get('credential_version',0)!=user.get('credential_version',0):
         raise HTTPException(401,'Credentials changed. Sign in again.')
     if not verify_password(body.current_password,document['password_hash']): raise HTTPException(403,'Invalid current password or authentication code')
     if require_mfa:

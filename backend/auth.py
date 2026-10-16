@@ -128,7 +128,7 @@ async def login(body: Credentials, response: Response):
     email = str(body.email).lower()
     await charge_auth_attempt("login", email)
     doc = await db.users.find_one({"email": email})
-    if not doc or not verify_password(body.password, doc["password_hash"]):
+    if not doc or doc.get("disabled") or not verify_password(body.password, doc["password_hash"]):
         raise HTTPException(401, "Invalid email or password")
     if doc.get("mfa_enabled"):
         from mfa import consume
@@ -190,7 +190,7 @@ async def refresh(request: Request, response: Response):
     except Exception:
         raise HTTPException(401, "Session expired. Sign in again.")
     doc = await db.users.find_one({"_id": payload["sub"]})
-    if not doc or doc.get("credential_version", 0) != session.get("credential_version", 0):
+    if not doc or doc.get("disabled") or doc.get("credential_version", 0) != session.get("credential_version", 0):
         raise HTTPException(401, "Session expired. Sign in again.")
     return await establish_session(clean(doc), response)
 

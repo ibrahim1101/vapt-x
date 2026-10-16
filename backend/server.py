@@ -129,3 +129,6 @@ app.include_router(analytics_router)
 
 from mfa import router as mfa_router
 app.include_router(mfa_router)
+
+from account_admin import router as account_admin_router
+app.include_router(account_admin_router)
