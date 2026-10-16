@@ -90,6 +90,9 @@ def build_pdf(project, assessment, findings, jobs, evidence, scopes, tasks, opti
         story.extend([Spacer(1, 16), p("Finding details", "Heading2")])
     for number, finding in enumerate([] if options.template=="executive" else findings, 1):
         story.extend([KeepTogether([Spacer(1, 14), p(f"{number:02}. {finding['title']}", "Heading3"), p(f"{finding['severity'].upper()} | {finding['status']} | {finding['verification']} | {finding['scanner']}", "TinyText")]), p(f"Target: {finding['target']}", "TinyText"), p(finding["description"][:12000] if options.template=="technical" else "Observation details are retained in the immutable source snapshot."), Spacer(1, 6), p("Remediation", "Heading4"), p(finding["remediation"]), p(f"Analyst notes: {finding.get('notes') or 'None'}", "TinyText")])
+        if finding.get('severity_override'):
+            decision=finding['severity_override']
+            story.append(p(f"Analyst severity override: {finding['severity']} | Original scanner severity: {finding.get('scanner_severity','not recorded')} | Reason: {decision.get('reason','')}", "TinyText"))
         if finding.get('package_info'):
             package=finding['package_info']
             story.append(p(f"Scanner package: {package.get('name','')} | installed: {package.get('installed_version') or 'not reported'} | fixed: {package.get('fixed_version') or 'not reported'} | ecosystem: {package.get('ecosystem') or 'not reported'}. Version ordering/applicability is not evaluated.", "TinyText"))
@@ -131,7 +134,7 @@ def snapshot_bytes(sources, options):
     data={"schema_version":1,"generated_at":iso(),"options":options.model_dump(),
         "project":{key:project.get(key) for key in ("id","name","description")},
         "assessment":{key:assessment.get(key) for key in ("id","name","status","baseline_id","asset_ids")},
-        "findings":fields(findings,('id','title','severity','status','verification','source','scanner','target','rule_id','description','remediation','notes','owner','cve_ids','cwe_ids','finding_type','import_metadata','scanner_cvss','package_info','reference_urls','created_at')),
+        "findings":fields(findings,('id','title','severity','status','verification','source','scanner','target','rule_id','description','remediation','notes','owner','cve_ids','cwe_ids','scanner_severity','severity_override','severity_version','finding_type','import_metadata','scanner_cvss','package_info','reference_urls','created_at')),
         "jobs":fields(jobs,('id','scanner','source','status','finding_count','checks','error','inventory_count')),
         "evidence":fields(evidence,('id','finding_id','filename','status','size','sha256')),
         "scopes":fields(scopes,('id','target','authorization_reference','starts_at','ends_at','authorized','allowed_scanners','revoked_at')),
@@ -217,7 +220,7 @@ EXPORT_FIELDS = (
     'id', 'title', 'severity', 'status', 'verification', 'source', 'scanner',
     'target', 'asset_id', 'assessment_id', 'project_id', 'rule_id',
     'description', 'remediation', 'notes', 'created_at', 'cve_ids', 'cwe_ids',
-    'finding_type', 'import_metadata', 'scanner_cvss', 'package_info', 'reference_urls',
+    'scanner_severity', 'severity_override', 'severity_version', 'finding_type', 'import_metadata', 'scanner_cvss', 'package_info', 'reference_urls',
 )
 
 

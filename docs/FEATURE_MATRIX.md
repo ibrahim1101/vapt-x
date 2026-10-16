@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `0a78ac3bff83a567009e68984629e94a6cf0a0a7`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
+Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `0ef1e8ac2fe965e6af94737efefbc122f025cf7e`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
 | Area | Implemented and exercised | Remaining limits |
 |---|---|---|
@@ -23,9 +23,10 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 | Assessments | Creation, pagination/search, cancellation/retry/history, coverage-aware retest comparison | Process-local check ownership; restart marks interrupted jobs; no scheduler/durable assessment queue |
 | Scan jobs | Complete server pagination, literal ID/engine search, status/source filters, scoped asset names, independently loaded execution records and fresh initiating account/session/token checks before queued execution | Records reflect stored execution; no durable scheduling or automatic polling |
 | Checks | Bounded HTTP headers/cookies/TLS/security.txt/DNS and constrained Nmap; managed training target | Non-exploitative and intentionally limited; no exhaustive scanner or production sandbox |
-| Finding imports | Nmap, Nuclei, Semgrep, Trivy, ZAP, Gitleaks and Checkov with synthetic fixtures | Import assertions remain unverified; not every upstream schema is supported |
+| Finding imports | Nmap, Nuclei, Semgrep, Trivy vulnerabilities/configuration/secrets, ZAP, Gitleaks, Checkov, Prowler ASFF and MobSF Android static code/manifest reports | Import assertions remain unverified; Prowler OCSF and MobSF iOS/dynamic/other sections remain unsupported |
 | API/SBOM inventory | OpenAPI and CycloneDX/SPDX JSON import, deduplication and asset inventory view | Inventory only; no endpoint execution, external references or dependency completeness guarantee |
-| Findings | Normalization, scanner fingerprints, server filters/search/pagination, atomic triage history, bulk triage/owner and comments | Cross-scanner correlation and advanced CVSS/version workflows remain |
+| Findings | Normalization, scanner fingerprints, server filters/search/pagination, atomic triage history, bulk triage/owner, reasoned/version-checked severity override/restore with preserved scanner severity, comments and read-only cross-scanner candidates for shared CVEs on the same stored asset | Candidate correlation does not merge or establish equivalence; no general correlation/confidence engine |
+| Scanner facts | Trivy/Nuclei CVSS 3.0/3.1/4.0 vectors/source scores, explicit CVE/CWE IDs, package versions/references, separate UI and report/export provenance | Score/vector consistency, affected ranges, version ordering and verified fix applicability are not calculated |
 | Intelligence | Cached FIRST EPSS/CISA KEV/NVD/direct OSV CVE facts, offline/stale behavior and attribution | Heuristic prioritization; direct OSV ID misses do not rule out aliases |
 | Remediation | Task creation/edit, complete stage pagination/search/assignee/UTC-overdue filters, progress/completion and organization SLA policy | Assignees are labels; task completion does not resolve findings |
 | Exports/evidence | Private CSV/JSON export, formula escaping, chunk integrity/completion, download checksum checks and complete evidence register/search/upload-status filter | Complete-set operation caps; evidence size limits; no malware scanning or retention policy |
@@ -42,10 +43,10 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 
 | Check | Result | Run |
 |---|---|---|
-| Backend Python 3.11/3.12 with MongoDB | 263 passed | [38959015377](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015377) |
-| Frontend unit/components and production build | 101 passed, 30 suites; build passed | [38959015379](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015379) |
-| Docker smoke | Passed | [38959015374](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015374) |
-| Chromium against Nginx/Compose | Passed | [38959015397](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015397) |
+| Backend Python 3.11/3.12 with MongoDB | 287 passed | [38963420256](https://github.com/ibrahim1101/vapt-x/actions/runs/38963420256) |
+| Frontend unit/components and production build | 107 passed, 33 suites; build passed | [38963420010](https://github.com/ibrahim1101/vapt-x/actions/runs/38963420010) |
+| Docker smoke | Passed | [38963420013](https://github.com/ibrahim1101/vapt-x/actions/runs/38963420013) |
+| Chromium against Nginx/Compose | Passed | [38963420015](https://github.com/ibrahim1101/vapt-x/actions/runs/38963420015) |
 
 Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
 

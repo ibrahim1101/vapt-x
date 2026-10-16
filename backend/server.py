@@ -172,3 +172,6 @@ app.include_router(project_membership_router)
 
 from finding_correlations import router as correlations_router
 app.include_router(correlations_router)
+
+from finding_severity import router as severity_router
+app.include_router(severity_router)

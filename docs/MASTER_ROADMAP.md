@@ -1,8 +1,13 @@
 # VAPT-X engineering roadmap
 
-Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `0a78ac3` passed backend (263 tests with Mongo), frontend (101 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `0ef1e8a` passed backend (287 tests with Mongo), frontend (107 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Completed increments
+
+- Reasoned analyst severity override/restoration, preserved original scanner severity, conditional policy versions and most-recent-100 decision history, with UI and report/export attribution.
+
+- Prowler ASFF and MobSF Android static imports; expanded Trivy configuration/secret findings; source metadata UI and raw-report/code omission.
+- Structured Trivy/Nuclei CVSS/source scores, package versions, references and explicit classification IDs, carried into UI, PDF/source snapshots and JSON/CSV exports. Read-only cross-scanner candidates share a normalized CVE and exact stored asset/project, with complete paginated results.
 
 - Queued scans revalidate initiating account status/credential epoch, session or API-token expiry/revocation, token membership and current action/project caps before execution. Running checks retain existing cancellation boundaries.
 
@@ -27,7 +32,7 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 
 1. Implement custom roles/service identities from the documented authorization design, with immutable credential project/action caps and negative regressions before broadening token access. Membership project admission is implemented.
 2. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
-3. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.
+3. Expand upstream import schema fixtures, CVSS score/vector consistency and package affected-range/version evaluation; broaden correlation beyond the implemented same-asset/CVE candidates; distinguish observations, imported assertions and analyst decisions.
 4. Add one native ticket/notification integration at a time with credential storage, bounded egress, tenant isolation and explicit activation.
 5. Define retention/quotas, key distribution/retirement policy, tamper-proof audit storage and backup/restore drills; implement monitored deployment, rollback and versioned release procedures.
 6. Broaden large-dataset, responsive/keyboard/error-state acceptance. Desktop packaging follows web stability.

@@ -309,3 +309,9 @@ Continued after the MobSF push with syntax-validated CVSS 3.0/3.1/4.0 source fac
 ## Cross-scanner candidate continuation
 
 Continued after the scoring/package push with a read-only, indexed, paginated candidate endpoint and finding-detail register. Candidates share a normalized CVE and exact stored project/asset with a different scanner; each observation and analyst decision stays independent. Added literal-search/field-minimization tests, real-Mongo pagination with 30 candidates plus tenant/project/asset/scanner/CVE decoys, restricted-project regression and a Chromium source-pair assertion. Full acceptance is pending at this checkpoint.
+
+Local final correlation checkpoint: full backend suite **273 passed, 14 Mongo-dependent skipped, 208 subtests passed**; frontend/E2E parser checks, dependency consistency and whitespace checks passed. Prior MobSF and structured-fact heads passed all four CI workflows; final-head evidence remains pending below.
+
+## Analyst severity decision continuation
+
+Continued after the fully green correlation head (`0ef1e8a`) with explicit severity override/restoration. New findings preserve scanner severity; legacy observations capture their unchanged baseline on first decision. Reasoned changes use durable compare-and-swap versions and atomic bounded history; list pages omit history payloads. Details, PDFs, snapshots and exports distinguish effective and original severity. Added API/permission/race/restore regressions, real-Mongo concurrent writes and reimport preservation, component tests and Chromium form acceptance. Local suite before the final Mongo/component additions: **277 passed, 14 skipped, 211 subtests**. CI acceptance pending.

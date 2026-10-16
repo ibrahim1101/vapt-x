@@ -31,8 +31,11 @@ class ReportingTemplateTests(unittest.IsolatedAsyncioTestCase):
         finding=sources[2][0]
         finding.update(parse_report('trivy',json.dumps(TRIVY_FACTS))[0])
         finding['import_metadata']={'format':'synthetic-import'}
+        finding.update(scanner_severity='low',severity='high',severity_override={'reason':'Synthetic analyst decision'},severity_version=1)
         options=reporting.ReportOptions()
         snapshot=json.loads(reporting.snapshot_bytes(sources,options))['findings'][0]
+        self.assertEqual(snapshot['scanner_severity'],'low');self.assertEqual(snapshot['severity'],'high')
+        self.assertEqual(snapshot['severity_override']['reason'],'Synthetic analyst decision')
         self.assertEqual(snapshot['package_info']['fixed_version'],'1.1')
         self.assertEqual(snapshot['scanner_cvss'][1]['version'],'4.0')
         self.assertEqual(snapshot['import_metadata']['format'],'synthetic-import')

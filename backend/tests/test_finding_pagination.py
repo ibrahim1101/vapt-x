@@ -48,7 +48,7 @@ class FindingPaginationTests(unittest.IsolatedAsyncioTestCase):
             cursor.to_list=AsyncMock(return_value=[{'_id':'f','org_id':'org-one','created_by':'creator','created_at':'2026-01-01'}])
             result=await Repository(self.ctx).page('findings',{'org_id':'foreign','severity':'high'},offset=1000,limit=25)
             collection.count_documents.assert_awaited_once_with({'org_id':'org-one','severity':'high'})
-            collection.find.assert_called_once_with({'org_id':'org-one','severity':'high'},{'triage_history':0})
+            collection.find.assert_called_once_with({'org_id':'org-one','severity':'high'},{'triage_history':0,'severity_history':0})
             cursor.sort.assert_called_once_with([('created_at',-1),('_id',-1)])
             cursor.skip.assert_called_once_with(1000)
             self.assertEqual(result['items'][0]['id'],'f')

@@ -155,7 +155,7 @@ async def store_findings(repo, assessment, asset, job, rows):
         existing = await repo.list("findings", {"assessment_id": assessment["id"], "fingerprint": fingerprint})
         if existing:
             continue
-        await repo.add("findings", {**row, "fingerprint": fingerprint, "assessment_id": assessment["id"], "project_id": assessment["project_id"], "asset_id": asset["id"], "job_id": job["id"], "scanner": job["scanner"], "source": job["source"], "status": "open", "verification": "imported-unverified" if job["source"] == "import" else "observed", "notes": ""}, log=False)
+        await repo.add("findings", {**row, "scanner_severity": row["severity"], "fingerprint": fingerprint, "assessment_id": assessment["id"], "project_id": assessment["project_id"], "asset_id": asset["id"], "job_id": job["id"], "scanner": job["scanner"], "source": job["source"], "status": "open", "verification": "imported-unverified" if job["source"] == "import" else "observed", "notes": ""}, log=False)
         count += 1
     return count
 

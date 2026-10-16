@@ -52,6 +52,27 @@ class CloudConfigPersistenceTests(unittest.TestCase):
      assert facts['package_info']['installed_version']=='1.0' and facts['scanner_cvss'][0]['version']=='3.1',facts
      assert any(row.get('import_metadata',{}).get('format')=='mobsf-android-json' for row in export['findings'] if row.get('import_metadata'))
      source=next(row for row in rows if row.get('scanner_cvss'))
+     severity_path='findings/'+source['_id']+'/severity'
+     decision=post(severity_path,{'severity':'high','reason':'Synthetic business impact review','expected_version':0})
+     assert decision['severity']=='high' and decision['scanner_severity']=='low' and decision['verification']=='imported-unverified',decision
+     assert decision['scanner_cvss']==source['scanner_cvss']
+     repeated=post('imports',{'assessment_id':assessment['id'],'asset_id':asset['id'],'scanner':'trivy','content':json.dumps(TRIVY_FACTS)})
+     assert repeated['finding_count']==0 and db.findings.find_one({'_id':source['_id']})['severity']=='high'
+     overridden=client.get('/api/assessments/'+assessment['id']+'/findings/export').json()
+     exported_decision=next(row for row in overridden['findings'] if row['id']==source['_id'])
+     assert exported_decision['severity']=='high' and exported_decision['scanner_severity']=='low' and exported_decision['severity_override']['reason']=='Synthetic business impact review',exported_decision
+     assert client.post('/api/'+severity_path,headers=headers(),json={'severity':'critical','reason':'Stale synthetic decision','expected_version':0}).status_code==409
+     restored=post(severity_path,{'severity':None,'reason':'Restore scanner source rating','expected_version':1})
+     assert restored['severity']=='low' and restored['scanner_severity']=='low' and restored['severity_override'] is None,restored
+     history=client.get('/api/findings/'+source['_id']+'/severity-history').json()
+     assert history['total']==2 and history['events'][0]['actor_id']==user['id'] and history['events'][1]['decision']=='restore_scanner',history
+     from concurrent.futures import ThreadPoolExecutor
+     stable_headers=headers()
+     def race(severity):return client.post('/api/'+severity_path,headers=stable_headers,json={'severity':severity,'reason':'Concurrent synthetic severity decision','expected_version':2}).status_code
+     with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(race,['high','critical']))
+     assert sorted(statuses)==[200,409],statuses
+     assert db.findings.find_one({'_id':source['_id']})['severity_history_total']==3
+     assert post(severity_path,{'severity':None,'reason':'Restore original source after race','expected_version':3})['severity']=='low'
      common={'org_id':org['id'],'project_id':project['id'],'asset_id':asset['id'],'assessment_id':assessment['id'],
       'created_by':user['id'],'created_at':now.isoformat(),'title':'Synthetic correlated observation','severity':'low','status':'open',
       'verification':'imported-unverified','source':'import','scanner':'semgrep','target':'fixture','cve_ids':['CVE-2099-0001'],'description':'private-correlated-detail'}
@@ -77,14 +98,17 @@ class CloudConfigPersistenceTests(unittest.TestCase):
      member={'org_id':org['id'],'user_id':user['id']}
      db.memberships.update_one(member,{'$set':{'role':'viewer'}})
      assert client.post('/api/imports',headers=headers(),json=body).status_code==403
+     assert client.post('/api/'+severity_path,headers=headers(),json={'severity':'high','reason':'Unauthorized synthetic review','expected_version':2}).status_code==403
      db.memberships.update_one(member,{'$set':{'role':'analyst','project_access':{'mode':'selected','project_ids':[]}}})
      assert client.post('/api/imports',headers=headers(),json=body).status_code==404
      assert client.get(correlation_path).status_code==404
+     assert client.get('/api/findings/'+source['_id']+'/severity-history').status_code==404
+     assert client.post('/api/'+severity_path,headers=headers(),json={'severity':'high','reason':'Unavailable project decision','expected_version':2}).status_code==404
      db.memberships.update_one(member,{'$set':{'role':'org_admin'}})
      db.scopes.update_one({'_id':scope['id']},{'$set':{'allowed_scanners':['trivy']}})
      assert client.post('/api/imports',headers=headers(),json=body).status_code==403
      assert db.jobs.count_documents({})==before
-     assert db.audit_events.count_documents({'org_id':org['id'],'action':'jobs.created'})==8
+     assert db.audit_events.count_documents({'org_id':org['id'],'action':'jobs.created'})==9
    finally:
     mongo.drop_database(database);mongo.close()
   ''')
