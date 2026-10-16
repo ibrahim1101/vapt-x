@@ -2,26 +2,63 @@ import axios from 'axios';
 import { apiBaseUrl } from './api-config';
 
 export const api = axios.create({ baseURL: apiBaseUrl(process.env.REACT_APP_BACKEND_URL), withCredentials: true });
-api.interceptors.request.use(config => {
+let credentialGeneration = 0;
+const credentialChanges = new Set();
+const rotatesCredentials = url => /^\/auth\/(?:password|mfa\/(?:confirm|disable|recovery-codes))$/.test(url || '');
+function settleCredentialChange(config, succeeded) {
+  const change = config?._credentialChange;
+  if (!change || change.done) return;
+  change.done = true;
+  credentialChanges.delete(change);
+  if (succeeded) credentialGeneration += 1;
+  change.resolve();
+}
+function prepareRequest(config) {
+  if (config.method?.toLowerCase() === 'post' && rotatesCredentials(config.url) && refreshing) {
+    return refreshing.then(() => prepareRequest(config));
+  }
+  config._credentialGeneration = credentialGeneration;
+  if (config.method?.toLowerCase() === 'post' && rotatesCredentials(config.url)) {
+    const change = { done: false };
+    change.promise = new Promise(resolve => { change.resolve = resolve; });
+    credentialChanges.add(change);
+    config._credentialChange = change;
+  }
   const csrf = document.cookie.split('; ').find(c => c.startsWith('csrf='))?.split('=').slice(1).join('=');
   if (csrf) config.headers['X-CSRF-Token'] = decodeURIComponent(csrf);
   const org = localStorage.getItem('vaptx-org');
   if (org) config.headers['X-Org-Id'] = org;
   return config;
-});
+}
+api.interceptors.request.use(prepareRequest);
 let refreshing;
-api.interceptors.response.use(r => r, async error => {
+api.interceptors.response.use(response => {
+  settleCredentialChange(response.config, true);
+  return response;
+}, async error => {
   const original = error.config;
+  // A failed rotation must release readers too; its own 401 can then refresh normally.
+  settleCredentialChange(original, false);
   const retryableUrl = typeof original?.url === 'string' && (
     !original.url.startsWith('/auth/') || /^\/auth\/(?:sessions|mfa|password|security-events)(?:\/|\?|$)/.test(original.url)
   );
   if (error.response?.status === 401 && retryableUrl && !original._retried) {
     original._retried = true;
+    // A parallel read may be rejected after the old session is revoked but before
+    // the rotation response installs new cookies. Wait before attempting refresh.
+    await Promise.all([...credentialChanges].map(change => change.promise));
+    if (original._credentialGeneration !== undefined && original._credentialGeneration !== credentialGeneration) {
+      return api(original);
+    }
     try {
       refreshing = refreshing || api.post('/auth/refresh').finally(() => { refreshing = null; });
       await refreshing;
       return api(original);
-    } catch { window.dispatchEvent(new Event('vaptx-session-expired')); }
+    } catch {
+      await Promise.all([...credentialChanges].map(change => change.promise));
+      if (original._credentialGeneration !== undefined && original._credentialGeneration !== credentialGeneration) return api(original);
+      window.dispatchEvent(new Event('vaptx-session-expired'));
+    }
   }
   throw error;
 });

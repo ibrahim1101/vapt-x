@@ -13,6 +13,7 @@ jest.mock('axios', () => {
 });
 
 const requestHandler = api.interceptors.request.use.mock.calls[0][0];
+const successHandler = api.interceptors.response.use.mock.calls[0][0];
 const errorHandler = api.interceptors.response.use.mock.calls[0][1];
 
 beforeEach(() => {
@@ -109,3 +110,42 @@ test.each(['/auth/sessions', '/auth/sessions/session-id/revoke', '/auth/sessions
     expect(api).toHaveBeenCalledWith(failure.config);
   },
 );
+
+
+test('waits for password rotation before retrying a parallel old-session request', async () => {
+  const read = requestHandler({url:'/members/directory',headers:{}});
+  const password = requestHandler({url:'/auth/password',method:'post',headers:{}});
+  api.mockResolvedValue({data:'new-session directory'});
+  const pending = errorHandler({response:{status:401},config:read});
+  await Promise.resolve();
+  expect(api.post).not.toHaveBeenCalled();expect(api).not.toHaveBeenCalled();
+  successHandler({config:password,data:{ok:true}});
+  await expect(pending).resolves.toEqual({data:'new-session directory'});
+  expect(api.post).not.toHaveBeenCalled();expect(api).toHaveBeenCalledWith(read);
+});
+
+test('a failed rotation releases waiting requests to the normal refresh path', async () => {
+  const read = requestHandler({url:'/evidence',headers:{}});
+  const password = requestHandler({url:'/auth/password',method:'post',headers:{}});
+  const failure = {response:{status:403},config:password};
+  api.post.mockResolvedValue({data:{}});api.mockResolvedValue({data:'refreshed'});
+  const pending = errorHandler({response:{status:401},config:read});
+  await expect(errorHandler(failure)).rejects.toBe(failure);
+  await expect(pending).resolves.toEqual({data:'refreshed'});
+  expect(api.post).toHaveBeenCalledWith('/auth/refresh');
+});
+
+
+test('starts credential rotation only after an existing refresh finishes', async () => {
+  let finishRefresh;
+  api.post.mockReturnValue(new Promise(resolve=>{finishRefresh=resolve;}));
+  api.mockResolvedValue({data:'retried'});
+  const pendingRead=errorHandler({response:{status:401},config:{url:'/reports'}});
+  await Promise.resolve();
+  const pendingPassword=requestHandler({url:'/auth/password',method:'post',headers:{}});
+  expect(pendingPassword).toBeInstanceOf(Promise);
+  finishRefresh({data:{}});
+  await pendingRead;
+  const password=await pendingPassword;
+  successHandler({config:password});
+});
