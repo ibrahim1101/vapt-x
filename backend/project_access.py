@@ -21,3 +21,12 @@ def metadata(membership):
 
 def require_all_projects(ctx):
     if ctx.project_ids is not None:raise HTTPException(403,'Organization-wide access is required for this operation')
+
+
+def effective_projects(membership,user):
+    allowed=membership_projects(membership)
+    if not user.get('_api_token_id'):return allowed
+    cap=user.get('_token_project_ids')
+    if cap is None:return allowed  # Legacy/uncapped credentials inherit live grants.
+    if not isinstance(cap,list) or len(cap)>500 or any(not isinstance(value,str) or not 1<=len(value)<=100 for value in cap):return []
+    return sorted(set(cap) if allowed is None else set(cap).intersection(allowed))

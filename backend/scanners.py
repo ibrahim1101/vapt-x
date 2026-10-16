@@ -171,8 +171,8 @@ async def run_job(ctx, job_id):
             membership = await db.memberships.find_one({"org_id": ctx.org_id, "user_id": ctx.uid})
             if not membership:
                 raise ValueError("Organization access was revoked")
-            from project_access import membership_projects
-            allowed=membership_projects(membership)
+            from project_access import effective_projects
+            allowed=effective_projects(membership,ctx.user)
             if allowed is not None and job.get('project_id') not in allowed:raise ValueError('Project access was revoked before execution')
             if ctx.membership_id and str(membership.get('_id'))!=ctx.membership_id:raise ValueError('Organization membership changed before execution')
             ctx.project_ids=allowed

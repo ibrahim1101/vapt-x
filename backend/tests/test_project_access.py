@@ -81,3 +81,14 @@ class GrantVersionTests(unittest.IsolatedAsyncioTestCase):
    db.users.find_one=AsyncMock(return_value={'_id':'admin'})
    with self.assertRaises(HTTPException) as error:await project_membership.set_project_access('target',project_membership.ProjectAccessInput(mode='all',expected_version=1),ctx)
    self.assertEqual(error.exception.status_code,409);db.memberships.update_one.assert_not_called();db.projects.count_documents.assert_not_called()
+
+class TokenProjectCapTests(unittest.TestCase):
+ def test_fixed_caps_intersect_live_membership_and_never_expand(self):
+  from project_access import effective_projects
+  token={'_api_token_id':'token','_token_project_ids':['a']}
+  self.assertEqual(effective_projects({'role':'org_admin'},token),['a'])
+  self.assertEqual(effective_projects({'role':'analyst','project_access':{'mode':'selected','project_ids':['b']}},token),[])
+  self.assertEqual(effective_projects({'role':'analyst','project_access':{'mode':'selected','project_ids':['a','b']}},token),['a'])
+  self.assertEqual(effective_projects({'role':'analyst'},{'_api_token_id':'token','_token_project_ids':[]}),[])
+  self.assertEqual(effective_projects({'role':'analyst'},{'_api_token_id':'token','_token_project_ids':'invalid'}),[])
+  self.assertIsNone(effective_projects({'role':'analyst'},{'_api_token_id':'legacy'}))

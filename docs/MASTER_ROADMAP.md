@@ -4,6 +4,7 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 
 ## Completed increments
 
+- Membership project admission across browser/token queries, aggregates, reports/evidence and audit; admin grant editor with version checks. Custom-role/service-identity design boundaries are documented.
 - Operator-only dry-run/apply key rewrapping for MFA, webhooks and OIDC, with conditional updates and original timestamp preservation.
 - Runtime validation, request/resource limits, reproducible dependencies, API/frontend containers and CI.
 - Cookie sessions, atomic refresh and password budgets, password changes, encrypted TOTP/recovery, private account history and owner-only account disable/reactivate.
@@ -22,7 +23,7 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 
 ## Next implementation order
 
-1. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
+1. Implement custom roles/service identities from the documented authorization design, with immutable credential project/action caps and negative regressions before broadening token access. Membership project admission is implemented.
 2. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
 3. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.
 4. Add one native ticket/notification integration at a time with credential storage, bounded egress, tenant isolation and explicit activation.

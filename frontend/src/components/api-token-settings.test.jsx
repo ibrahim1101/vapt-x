@@ -23,3 +23,15 @@ test('shows newly issued secret once and clears it when closed',async()=>{
   act(()=>document.querySelector('[data-testid="close-created-api-token"]').click());
   expect(document.body.textContent).not.toContain('synthetic-token-shown-once');
 });
+
+test('empty fixed selection is explicit and cannot inherit later owner grants',async()=>{
+ api.get.mockImplementation(path=>Promise.resolve({data:path==='/api-tokens'?{tokens:[]}:{items:[],total:0,has_more:false}}));
+ api.post.mockResolvedValue({data:{token:'synthetic-capped-token',notice:'Fixed selection'}});
+ await act(async()=>root.render(<APITokenSettings/>));
+ act(()=>container.querySelector('[data-testid="new-api-token"]').click());
+ await act(async()=>document.querySelector('[data-testid="token-limit-projects"]').click());
+ document.querySelector('[name="name"]').value='Fixed empty cap';
+ await act(async()=>document.querySelector('[data-testid="workspace-modal"] form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(api.post).toHaveBeenCalledWith('/api-tokens',{name:'Fixed empty cap',expires_days:30,scopes:['read'],project_ids:[]});
+ expect(document.body.textContent).toContain('synthetic-capped-token');
+});

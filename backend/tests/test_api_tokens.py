@@ -47,3 +47,19 @@ class APITokenTests(unittest.IsolatedAsyncioTestCase):
     def test_permission_and_expiry_validation(self):
         for body in ({'name':'Synthetic','scopes':['*']},{'name':'Synthetic','scopes':['read'],'expires_days':91},{'name':'Synthetic','scopes':[]}):
             with self.assertRaises(ValidationError):api_tokens.TokenInput(**body)
+
+class FixedProjectCapTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unavailable_project_cap_is_rejected_before_token_insert(self):
+        ctx=Ctx({'id':'owner'},'org','analyst');ctx.project_ids=['allowed']
+        with patch.object(api_tokens,'db') as database:
+            database.projects.count_documents=AsyncMock(return_value=0)
+            with self.assertRaises(HTTPException) as error:await api_tokens.create_token(api_tokens.TokenInput(name='Fixed cap',scopes=['read'],project_ids=['forbidden']),ctx)
+            self.assertEqual(error.exception.status_code,404)
+            query=database.projects.count_documents.call_args.args[0]
+            self.assertEqual(query['$and'][1],{'_id':{'$in':['allowed']}})
+            database.api_tokens.count_documents.assert_not_called()
+    def test_project_cap_validation_and_deduplication(self):
+        self.assertEqual(api_tokens.TokenInput(name='Fixed cap',scopes=['read'],project_ids=['b','a','a']).project_ids,['a','b'])
+        self.assertEqual(api_tokens.TokenInput(name='No projects',scopes=['read'],project_ids=[]).project_ids,[])
+        for value in ([''] , ['a']*501):
+            with self.assertRaises(ValidationError):api_tokens.TokenInput(name='Invalid cap',scopes=['read'],project_ids=value)

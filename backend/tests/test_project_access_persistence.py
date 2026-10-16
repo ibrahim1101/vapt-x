@@ -52,6 +52,9 @@ class ProjectAccessPersistenceTests(unittest.TestCase):
      token_response=client.post('/api/api-tokens',headers=headers(),json={'name':'Pre-existing ACL token','scopes':['read','write','report','triage']})
      assert token_response.status_code==200,token_response.text
      token=token_response.json()['token']
+     capped_response=client.post('/api/api-tokens',headers=headers(),json={'name':'Fixed project cap','scopes':['read'],'project_ids':[projects[0]]});assert capped_response.status_code==200,capped_response.text
+     capped=capped_response.json()['token']
+     assert client.get('/api/projects',headers={'authorization':'Bearer '+capped}).json()['total']==1
      assert client.get('/api/projects',headers=headers()).json()['total']==2
      cookies(owner_cookies)
      denied=client.post('/api/members/'+owner['id']+'/project-access',headers=headers(),json={'mode':'selected','project_ids':[]});assert denied.status_code==409
@@ -72,6 +75,9 @@ class ProjectAccessPersistenceTests(unittest.TestCase):
       assert client.get('/api/evidence/allowed-evidence/download',headers=access_headers).content==b'allowed evidence'
       assert client.get('/api/reports/allowed-report/download',headers=access_headers).content==b'%PDF-allowed'
       assert client.get('/api/reports/allowed-report/snapshot',headers=access_headers).content==b'allowed snapshot'
+     invalid_cap=client.post('/api/api-tokens',headers=headers(),json={'name':'Unavailable cap','scopes':['read'],'project_ids':[projects[1]]});assert invalid_cap.status_code==404
+     empty_cap=client.post('/api/api-tokens',headers=headers(),json={'name':'Empty fixed cap','scopes':['read'],'project_ids':[]});assert empty_cap.status_code==200,empty_cap.text
+     assert client.get('/api/projects',headers={'authorization':'Bearer '+empty_cap.json()['token']}).json()['total']==0
      # Restricted leads cannot subscribe org-wide webhooks or alter org policy.
      assert client.get('/api/webhooks',headers=headers()).status_code==403
      assert client.put('/api/sla-policy',headers=headers(),json={}).status_code==403
@@ -90,6 +96,9 @@ class ProjectAccessPersistenceTests(unittest.TestCase):
      # Granting all again restores project access without changing role or account.
      assert client.post('/api/members/'+member['id']+'/project-access',headers=headers(),json={'mode':'all','project_ids':[],'expected_version':2}).status_code==200
      assert client.get('/api/projects',headers={'authorization':'Bearer '+token}).json()['total']==2
+     assert client.get('/api/projects',headers={'authorization':'Bearer '+capped}).json()['total']==1
+     assert client.get('/api/workspace?project_id='+projects[1],headers={'authorization':'Bearer '+capped}).status_code==404
+     assert db.api_tokens.find_one({'name':'Fixed project cap'})['project_ids']==[projects[0]]
      assert db.users.find_one({'_id':member['id']}).get('credential_version',0)==0
    finally:
     mongo.drop_database(database);mongo.close()

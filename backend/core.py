@@ -123,7 +123,7 @@ async def get_current_user(request: Request) -> dict:
         user=await db.users.find_one({"_id":token["created_by"]})
         if not user or user.get("disabled") or user.get("credential_version",0)!=token.get("credential_version",0):raise HTTPException(401,"Token owner credentials changed")
         user=clean(user)
-        user.update(_token_scopes=token["scopes"],_token_org=token["org_id"],_api_token_id=str(token["_id"]),_token_membership_id=token.get("membership_id"))
+        user.update(_token_scopes=token["scopes"],_token_org=token["org_id"],_api_token_id=str(token["_id"]),_token_membership_id=token.get("membership_id"),_token_project_ids=token.get("project_ids"))
         enforce_workspace_policy(user,request.url.path)
         request.state.api_user=user
         return user
@@ -189,8 +189,8 @@ async def get_ctx(request: Request) -> Ctx:
         if await db.membership_revocations.find_one({"_id":org_id+":"+user["id"]}):
             raise HTTPException(401,"Legacy API token membership was removed")
     ctx=Ctx(user,org_id,m["role"])
-    from project_access import membership_projects
-    ctx.project_ids=membership_projects(m)
+    from project_access import effective_projects
+    ctx.project_ids=effective_projects(m,user)
     ctx.membership_id=str(m["_id"]) if m.get("_id") else None
     return ctx
 

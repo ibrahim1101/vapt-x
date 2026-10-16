@@ -21,10 +21,15 @@ test('administrator grants selected projects through the browser and existing ac
   const scoped=await request(member,'/projects',null,org.id);expect(scoped.data.total).toBe(1);expect(scoped.data.items[0].id).toBe(first.data.id);
   expect((await request(member,'/workspace?project_id='+second.data.id,null,org.id)).status).toBe(404);
   await member.reload();await member.getByTestId('nav-projects').click();await expect(member.getByTestId(`open-project-${first.data.id}`)).toBeVisible();await expect(member.getByTestId(`open-project-${second.data.id}`)).toHaveCount(0);await expect(member.getByTestId('new-project')).toHaveCount(0);await expect(member.getByTestId(`template-project-${first.data.id}`)).toHaveCount(0);
+  await member.getByTestId('nav-organization').click();await member.getByTestId('new-api-token').click();
+  let tokenModal=member.getByTestId('workspace-modal');await tokenModal.getByTestId('token-limit-projects').check();await tokenModal.getByTestId(`token-project-${first.data.id}`).check();await tokenModal.getByTestId('field-name').fill('Synthetic fixed project token');
+  const capped=await submit(member,'/api-tokens');expect(capped.project_ids).toEqual([first.data.id]);await member.getByTestId('close-created-api-token').click();
+  async function cappedCount(){return member.evaluate(async token=>(await (await fetch('/api/projects',{headers:{Authorization:'Bearer '+token}})).json()).total,capped.token);}
+  expect(await cappedCount()).toBe(1);
   await owner.getByTestId(`project-access-${account.id}`).click();modal=owner.getByTestId('workspace-modal');await modal.getByTestId(`project-grant-${first.data.id}`).uncheck();await submit(owner,`/members/${account.id}/project-access`);await expect(modal).toBeHidden();
-  expect((await request(member,'/projects',null,org.id)).data.total).toBe(0);
+  expect((await request(member,'/projects',null,org.id)).data.total).toBe(0);expect(await cappedCount()).toBe(0);
   await expect(owner.getByTestId(`members-row-${account.id}`)).toContainText('0 selected projects');
   await owner.getByTestId(`project-access-${account.id}`).click();modal=owner.getByTestId('workspace-modal');await modal.getByTestId('field-project-access-mode').selectOption('all');await submit(owner,`/members/${account.id}/project-access`);await expect(modal).toBeHidden();
-  expect((await request(member,'/projects',null,org.id)).data.total).toBe(2);
+  expect((await request(member,'/projects',null,org.id)).data.total).toBe(2);expect(await cappedCount()).toBe(1);
  }finally{await ownerContext.close();await memberContext.close();}
 });

@@ -393,7 +393,7 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await expect(page.getByTestId('field-new_password')).toHaveValue('');
   await page.getByTestId('logout').click();
   await login(page,email,changedPassword);
-  await expect(page.getByTestId('analytics-coverage')).toContainText('all stored records');
+  await expect(page.getByTestId('analytics-coverage')).toContainText('projects accessible under your current membership');
   await page.getByTestId('nav-organization').click();
   await page.getByTestId('mfa-enroll').click();
   let mfaModal=page.getByTestId('workspace-modal');
