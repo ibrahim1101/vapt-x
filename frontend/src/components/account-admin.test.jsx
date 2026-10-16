@@ -1,0 +1,22 @@
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { AccountAdministration } from './account-admin';
+import { api } from '../lib/api';
+jest.mock('../lib/api',()=>({api:{get:jest.fn(),post:jest.fn()},errorText:error=>error.message}));
+let container,root;
+beforeEach(()=>{global.IS_REACT_ACT_ENVIRONMENT=true;container=document.createElement('div');document.body.appendChild(container);root=createRoot(container);api.get.mockReset();api.post.mockReset();});
+afterEach(()=>{act(()=>root.unmount());container.remove();});
+test('protects platform owner and requires password plus reason to disable another account',async()=>{
+ api.get.mockResolvedValue({data:{items:[{id:'owner',name:'Owner',email:'owner@example.com',platform_role:'platform_admin',disabled:false},{id:'target',name:'Target',email:'target@example.com',disabled:false}],total:2,has_more:false}});
+ api.post.mockResolvedValue({data:{disabled:true}});
+ await act(async()=>root.render(<AccountAdministration user={{id:'owner'}}/>));
+ await act(async()=>new Promise(resolve=>setTimeout(resolve,250)));
+ expect(container.querySelector('[data-testid="change-account-owner"]')).toBeNull();
+ await act(async()=>container.querySelector('[data-testid="change-account-target"]').click());
+ expect(api.post).not.toHaveBeenCalled();
+ document.querySelector('[name="current_password"]').value='valid-password';
+ document.querySelector('[name="reason"]').value='Synthetic reason';
+ document.querySelector('[name="mfa_code"]').value='123456';
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(api.post).toHaveBeenCalledWith('/platform/accounts/target/state',{disabled:true,expected_disabled:false,current_password:'valid-password',mfa_code:'123456',reason:'Synthetic reason'});
+});

@@ -13,7 +13,10 @@ from core import db, Ctx, clean, iso, audit, sha256_hex
 from repository import Repository
 from importers import finding, parse_report
 
-SCANNERS = {"safe", "nmap", "nuclei", "semgrep", "trivy", "zap"}
+JOB_LOCK = asyncio.Lock()
+ACTIVE_CHECKS = {}  # Single-worker managed child tasks, keyed by organization/job.
+
+SCANNERS = {"safe", "nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov", "prowler", "mobsf", "openapi", "cyclonedx", "spdx"}
 
 
 def target_host(target):
@@ -39,9 +42,13 @@ async def resolve_public(host):
 
 
 async def validate_scope(repo, assessment, asset, scanner):
+    if assessment.get("status") == "cancelled":
+        raise HTTPException(409, "Assessment is cancelled. Create a retry to start new work.")
     if asset["project_id"] != assessment["project_id"] or asset["id"] not in assessment["asset_ids"]:
         raise HTTPException(400, "Asset does not belong to this assessment")
     scope = await repo.get("scopes", asset["scope_id"])
+    if scope["project_id"] != assessment["project_id"]:
+        raise HTTPException(403, "Scope does not belong to this assessment's project")
     current = datetime.now(timezone.utc)
     if not scope.get("authorized") or not (datetime.fromisoformat(scope["starts_at"]) <= current <= datetime.fromisoformat(scope["ends_at"])):
         raise HTTPException(403, "Scope is not authorized or is outside its approved time window")
@@ -128,9 +135,12 @@ async def nmap_scan(asset, ip):
     process = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     try:
         output, error = await asyncio.wait_for(process.communicate(), timeout=60)
-    except asyncio.TimeoutError:
-        process.kill()
+    except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
+        if process.returncode is None:
+            process.kill()
         await process.wait()
+        if isinstance(exc, asyncio.CancelledError):
+            raise
         raise ValueError("Nmap exceeded the 60 second execution limit")
     if process.returncode:
         raise ValueError(error.decode(errors="replace")[:500])
@@ -145,35 +155,91 @@ async def store_findings(repo, assessment, asset, job, rows):
         existing = await repo.list("findings", {"assessment_id": assessment["id"], "fingerprint": fingerprint})
         if existing:
             continue
-        await repo.add("findings", {**row, "fingerprint": fingerprint, "assessment_id": assessment["id"], "project_id": assessment["project_id"], "asset_id": asset["id"], "job_id": job["id"], "scanner": job["scanner"], "source": job["source"], "status": "open", "verification": "imported-unverified" if job["source"] == "import" else "observed", "notes": ""}, log=False)
+        await repo.add("findings", {**row, "scanner_severity": row["severity"], "fingerprint": fingerprint, "assessment_id": assessment["id"], "project_id": assessment["project_id"], "asset_id": asset["id"], "job_id": job["id"], "scanner": job["scanner"], "source": job["source"], "status": "open", "verification": "imported-unverified" if job["source"] == "import" else "observed", "notes": ""}, log=False)
         count += 1
     return count
 
 
+async def execution_credentials(ctx):
+    """Recheck the initiating credential before any target resolution or execution."""
+    user = await db.users.find_one({"_id": ctx.uid})
+    epoch = ctx.user.get("credential_version", 0)
+    if not user or user.get("disabled") or user.get("credential_version", 0) != epoch:
+        raise ValueError("Initiator credentials changed before execution")
+    if ctx.user.get("_api_token_id"):
+        token = await db.api_tokens.find_one({"_id": ctx.user["_api_token_id"],
+            "org_id": ctx.org_id, "created_by": ctx.uid, "revoked": False,
+            "expires_at": {"$gt": iso()}, "credential_version": epoch})
+        if not token:
+            raise ValueError("API token revoked or expired before execution")
+        if token.get("membership_id") != ctx.user.get("_token_membership_id"):
+            raise ValueError("API token membership changed before execution")
+        ctx.user = {**ctx.user, "_token_project_ids": token.get("project_ids")}
+        ctx.scopes = token["scopes"]
+    else:
+        session = await db.sessions.find_one({"_id": ctx.user.get("_sid"),
+            "user_id": ctx.uid, "revoked": False, "expires_at": {"$gt": iso()}})
+        if not session or session.get("credential_version", 0) != epoch:
+            raise ValueError("Session revoked or expired before execution")
+
+
 async def run_job(ctx, job_id):
     repo = Repository(ctx)
+    key = (ctx.org_id, job_id)
     try:
-        job = await repo.get("jobs", job_id)
-        membership = await db.memberships.find_one({"org_id": ctx.org_id, "user_id": ctx.uid})
-        if not membership:
-            raise ValueError("Organization access was revoked")
-        ctx.role = membership["role"]
-        ctx.require("scan")
-        assessment = await repo.get("assessments", job["assessment_id"])
-        asset = await repo.get("assets", job["asset_id"])
-        await validate_scope(repo, assessment, asset, job["scanner"])
-        await repo.update("jobs", job_id, {"status": "running", "started_at": iso(), "logs": ["Authorization and approved time window validated.", "Resolving and pinning target address."]}, log=False)
-        ip = "127.0.0.1" if asset["target"] == "training://local" else await resolve_public(target_host(asset["target"]))
-        raw = None
-        if job["scanner"] == "safe":
-            rows, checks = await safe_checks(asset, ip)
-        else:
-            rows, checks, raw = await nmap_scan(asset, ip)
-        count = await store_findings(repo, assessment, asset, job, rows)
-        await repo.update("jobs", job_id, {"status": "completed", "finished_at": iso(), "checks": checks, "finding_count": count, "raw_output": raw, "logs": ["Authorization verified.", f"Connected to pinned address {ip}.", f"Completed {len(checks)} checks. Stored {count} new observations."]}, log=False)
-        await repo.update("assessments", assessment["id"], {"status": "review"}, log=False)
+        async with JOB_LOCK:
+            job = await repo.get("jobs", job_id)
+            if job["status"] != "queued":
+                return
+            await execution_credentials(ctx)
+            membership = await db.memberships.find_one({"org_id": ctx.org_id, "user_id": ctx.uid})
+            if not membership:
+                raise ValueError("Organization access was revoked")
+            from project_access import effective_projects
+            allowed=effective_projects(membership,ctx.user)
+            if allowed is not None and job.get('project_id') not in allowed:raise ValueError('Project access was revoked before execution')
+            if ctx.membership_id and str(membership.get('_id'))!=ctx.membership_id:raise ValueError('Organization membership changed before execution')
+            ctx.project_ids=allowed
+            ctx.role = membership["role"]
+            ctx.require("scan")
+            assessment = await repo.get("assessments", job["assessment_id"])
+            asset = await repo.get("assets", job["asset_id"])
+            await validate_scope(repo, assessment, asset, job["scanner"])
+            await repo.update("jobs", job_id, {"status": "running", "started_at": iso(), "logs": ["Authorization and approved time window validated.", "Resolving and pinning target address."]}, log=False)
+            async def execute():
+                ip = "127.0.0.1" if asset["target"] == "training://local" else await resolve_public(target_host(asset["target"]))
+                if job["scanner"] == "safe":
+                    rows, checks = await safe_checks(asset, ip)
+                    return rows, checks, None, ip
+                rows, checks, raw = await nmap_scan(asset, ip)
+                return rows, checks, raw, ip
+            task = asyncio.create_task(execute())
+            ACTIVE_CHECKS[key] = task
+        rows, checks, raw, ip = await task
+        async with JOB_LOCK:
+            # Cancellation and finding persistence are serialized. A cancelled
+            # assessment can never be restored to review by a late result.
+            assessment = await repo.get("assessments", job["assessment_id"])
+            if assessment.get("status") == "cancelled":
+                await repo.update("jobs", job_id, {"status": "cancelled", "finished_at": iso()}, log=False)
+                return
+            count = await store_findings(repo, assessment, asset, job, rows)
+            await repo.update("jobs", job_id, {"status": "completed", "finished_at": iso(), "checks": checks, "finding_count": count, "raw_output": raw, "logs": ["Authorization verified.", f"Connected to pinned address {ip}.", f"Completed {len(checks)} checks. Stored {count} new observations."]}, log=False)
+            await repo.update("assessments", assessment["id"], {"status": "review"}, log=False)
         await audit(ctx, "scan.completed", "jobs", job_id, {"findings": count})
+    except asyncio.CancelledError:
+        current = await repo.get("jobs", job_id)
+        status = "cancelled" if current.get("status") == "cancelling" else "interrupted"
+        await repo.update("jobs", job_id, {"status": status, "finished_at": iso()}, log=False)
+        await audit(ctx, "scan." + status, "jobs", job_id)
+        if status == "interrupted":
+            raise
     except Exception as exc:
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
-        await repo.update("jobs", job_id, {"status": "failed", "error": str(detail)[:1000], "finished_at": iso()}, log=False)
-        await audit(ctx, "scan.failed", "jobs", job_id, {"error": str(detail)[:300]})
+        async with JOB_LOCK:
+            current = await repo.get("jobs", job_id)
+            status = "cancelled" if current.get("status") in {"cancelling", "cancelled"} else "failed"
+            await repo.update("jobs", job_id, {"status": status, "error": str(detail)[:1000], "finished_at": iso()}, log=False)
+        await audit(ctx, "scan." + status, "jobs", job_id, {"error": str(detail)[:300]})
+    finally:
+        ACTIVE_CHECKS.pop(key, None)

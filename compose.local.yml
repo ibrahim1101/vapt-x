@@ -1,4 +1,43 @@
 services:
+  web:
+    profiles: ["web"]
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_BACKEND_URL: ${VAPTX_PUBLIC_API_URL:-}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${VAPTX_WEB_PORT:-3000}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  api:
+    profiles: ["api", "web"]
+    build:
+      context: ./backend
+      args:
+        INSTALL_AI: ${VAPTX_INSTALL_AI:-false}
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGO_URL: mongodb://mongodb:27017
+      INTERNAL_API_URL: http://127.0.0.1:8001
+    ports:
+      - "127.0.0.1:${VAPTX_API_PORT:-8001}:8001"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   mongodb:
     image: mongo:7
     restart: unless-stopped

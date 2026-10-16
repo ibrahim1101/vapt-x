@@ -1,0 +1,9 @@
+-r requirements.txt
+
+# Test tools, including the workers required by pytest.ini.
+execnet==2.1.2
+iniconfig==2.3.1
+packaging==26.3
+pluggy==1.6.0
+pytest==8.3.5
+pytest-xdist==3.6.1

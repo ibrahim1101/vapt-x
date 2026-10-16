@@ -89,3 +89,9 @@ android-sdk/
 credentials.json
 *.key
 .credentials
+
+# Local verification output
+frontend/build/
+.pytest_cache/
+playwright-report/
+test-results/
