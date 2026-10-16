@@ -472,7 +472,7 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await page.getByTestId('field-new_password').fill('synthetic-invalid-reset-password');
   await page.getByTestId('field-confirm_password').fill('synthetic-invalid-reset-password');
   await page.getByTestId('form-submit').click();
-  await expect(page.getByRole('alert')).toContainText('invalid, expired or already used');
+  await expect(page.getByRole('alert')).toContainText('Password recovery is not configured');
   await page.getByTestId('recovery-back').click();
   await expect(page.getByTestId('field-password')).toBeVisible();
   expect(pageErrors).toEqual([]);

@@ -37,6 +37,12 @@ def mail_configuration():
     if bool(username) != bool(password): raise ValueError('Recovery SMTP username and password must be configured together')
     return {'host':host,'port':port,'mode':mode,'sender':sender,'username':username,'password':password}
 
+def require_configuration():
+    try: config = mail_configuration()
+    except ValueError: config = None
+    if config is None: raise HTTPException(503,'Password recovery is not configured. Contact your operator.')
+    return config
+
 def send_mail(config, recipient, link):
     message = EmailMessage()
     message['From'] = config['sender'];message['To'] = recipient
@@ -72,9 +78,7 @@ async def availability():
 
 @router.post('/request',status_code=202)
 async def request_recovery(body: RecoveryRequest):
-    try: config = mail_configuration()
-    except ValueError: config = None
-    if config is None: raise HTTPException(503,'Password recovery is not configured. Contact your operator.')
+    config = require_configuration()
     email = str(body.email).lower()
     await charge_auth_attempt('recovery-request',sha256_hex(email.encode()))
     user = await db.users.find_one({'email':email,'disabled':{'$ne':True}})
@@ -100,6 +104,7 @@ async def request_recovery(body: RecoveryRequest):
 
 @router.post('/complete')
 async def complete_recovery(body: RecoveryCompletion):
+    require_configuration()
     digest = sha256_hex(body.token.encode())
     token = await db.account_recovery.find_one({'token_hash':digest,'used_at':None,'expires_at':{'$gt':now()}})
     if not token: raise HTTPException(400,INVALID)

@@ -1,6 +1,6 @@
 # Password recovery
 
-Recovery is disabled by default. It requires an operator-configured SMTP service and does not activate any mail delivery during synthetic acceptance. Email verification, invitations and OIDC are separate remaining work; recovery does not make an email verified.
+Recovery is disabled by default. Disabling it blocks both new requests and redemption of previously issued links. It requires an operator-configured SMTP service and does not activate any mail delivery during synthetic acceptance. Email verification, invitations and OIDC are separate remaining work; recovery does not make an email verified.
 
 Set `ACCOUNT_RECOVERY_ENABLED=1` only when configuring delivery. Supply `RECOVERY_SMTP_HOST`, `RECOVERY_SMTP_FROM`, `RECOVERY_SMTP_MODE` (`ssl` or `starttls`) and `RECOVERY_SMTP_PORT` (normally 465 or 587 respectively). Set both `RECOVERY_SMTP_USERNAME` and `RECOVERY_SMTP_PASSWORD` if the relay requires authentication. Keep credentials outside source control. TLS certificate verification is required; there is no plaintext fallback. Enabled invalid configuration prevents API startup. `FRONTEND_URL` determines reset-link destinations.
 

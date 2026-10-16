@@ -8,6 +8,10 @@ from pydantic import ValidationError
 import account_recovery as recovery
 
 class AccountRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        environment=patch.dict('os.environ',{'ACCOUNT_RECOVERY_ENABLED':'1','RECOVERY_SMTP_HOST':'smtp.synthetic.invalid','RECOVERY_SMTP_FROM':'operator@example.com','RECOVERY_SMTP_MODE':'ssl','RECOVERY_SMTP_PORT':'465','RECOVERY_SMTP_USERNAME':'','RECOVERY_SMTP_PASSWORD':''})
+        environment.start();self.addCleanup(environment.stop)
+
     async def test_hash_only_delivery_and_nonexistent_account_response(self):
         with patch.object(recovery,'mail_configuration',return_value={'synthetic':True}),patch.object(recovery,'db') as db,patch.object(recovery,'charge_auth_attempt',new_callable=AsyncMock),patch.object(recovery,'send_mail') as sender:
             db.users.find_one=AsyncMock(return_value={'_id':'u','email':'fixture@example.com','credential_version':2})
@@ -74,3 +78,9 @@ class AccountRecoveryTests(unittest.IsolatedAsyncioTestCase):
             connection.starttls.assert_called_once_with(context=context.return_value)
             self.assertLess([call[0] for call in connection.method_calls].index('starttls'),[call[0] for call in connection.method_calls].index('login'))
             self.assertEqual(smtp.call_args.kwargs['timeout'],10)
+
+    async def test_disabled_recovery_also_blocks_redemption(self):
+        with patch.object(recovery,'mail_configuration',return_value=None),patch.object(recovery,'db') as db:
+            with self.assertRaises(HTTPException) as error:
+                await recovery.complete_recovery(recovery.RecoveryCompletion(token='t'*43,new_password='new-password'))
+            self.assertEqual(error.exception.status_code,503);db.account_recovery.find_one.assert_not_called()
