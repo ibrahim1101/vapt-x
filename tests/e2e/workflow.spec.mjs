@@ -482,5 +482,13 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await expect(page.getByRole('alert')).toContainText('Email verification is not configured');
   await page.getByTestId('verification-back').click();
   await expect(page.getByTestId('field-password')).toBeVisible();
+  await login(page,email,changedPassword);
+  await page.goto('/#invite_token='+('invalid-synthetic-token-'.repeat(2)));
+  await expect(page.getByRole('heading',{name:'Accept organization invitation'})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>window.location.hash)).toBe('');
+  await expect(page.getByRole('alert')).toContainText('Organization invitations are not configured');
+  await expect(page.getByTestId('form-submit')).toBeDisabled();
+  await page.getByTestId('invitation-cancel').click();
+  await expect(page.getByTestId('field-password')).toBeVisible();
   expect(pageErrors).toEqual([]);
 });

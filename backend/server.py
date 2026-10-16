@@ -27,6 +27,7 @@ async def lifespan(app):
     try:
         from account_recovery import mail_configuration
         mail_configuration('EMAIL_VERIFICATION_ENABLED')
+        mail_configuration('ORG_INVITATIONS_ENABLED')
         mail_configuration()  # Enabled mail delivery must be valid before accepting requests.
         await db.command('ping')
         await seed_admin()
@@ -42,6 +43,9 @@ async def lifespan(app):
         await db.account_recovery.create_index('expires_at',expireAfterSeconds=0)
         await db.email_verifications.create_index('token_hash',unique=True)
         await db.email_verifications.create_index('expires_at',expireAfterSeconds=0)
+        await db.invitations.create_index('token_hash',unique=True)
+        await db.invitations.create_index('expires_at',expireAfterSeconds=0)
+        await db.invitations.create_index([('org_id',1),('created_at',-1),('_id',-1)])
         await db.api_tokens.create_index([('org_id',1),('created_by',1),('revoked',1),('expires_at',1)])
         await db.sla_policies.create_index('org_id',unique=True)
         await db.finding_comments.create_index([('org_id',1),('finding_id',1),('created_at',-1),('_id',-1)])
@@ -152,3 +156,6 @@ app.include_router(account_recovery_router)
 
 from account_verification import router as account_verification_router
 app.include_router(account_verification_router)
+
+from invitations import router as invitations_router
+app.include_router(invitations_router)

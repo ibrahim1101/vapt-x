@@ -100,7 +100,7 @@ test('preserves the original download error when its blob is not JSON', async ()
 });
 
 
-test.each(['/auth/sessions', '/auth/sessions/session-id/revoke', '/auth/sessions/revoke-others', '/auth/mfa', '/auth/mfa/confirm', '/auth/password', '/auth/security-events', '/auth/email-verification', '/auth/email-verification/request'])(
+test.each(['/auth/sessions', '/auth/sessions/session-id/revoke', '/auth/sessions/revoke-others', '/auth/mfa', '/auth/mfa/confirm', '/auth/password', '/auth/security-events', '/auth/email-verification', '/auth/email-verification/request', '/auth/invitations', '/auth/invitations/preview', '/auth/invitations/accept'])(
   'refreshes expired access credentials for session management: %s', async url => {
     api.post.mockResolvedValue({ data: {} });
     api.mockResolvedValue({ data: 'retried' });
