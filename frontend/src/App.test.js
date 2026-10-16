@@ -30,7 +30,7 @@ let container, root;
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
-  AuthScreen.mockClear();Onboarding.mockClear();VerificationGate.mockClear();
+  AuthScreen.mockClear();Onboarding.mockClear();VerificationGate.mockClear();VerificationGate.mockImplementation(()=> <div data-testid="verification-gate"/>);
   window.history.replaceState(null,'','/');
   api.get.mockReset();
   container = document.createElement('div');
