@@ -15,13 +15,13 @@ class ExecutionCredentialPersistenceTests(unittest.TestCase):
    import scanners
    async def main():
     try:
-     for case in ('disabled','rotated','session_revoked','session_expired','token_revoked','token_expired','token_foreign','token_epoch','valid_session','valid_token'):
+     for case in ('disabled','rotated','session_revoked','session_expired','token_revoked','token_expired','token_foreign','token_epoch','token_scope','token_projects','token_membership','valid_session','valid_token'):
       for name in ('users','sessions','api_tokens','memberships','jobs','assessments','assets','audit_events'):
        await db[name].delete_many({})
       await db.users.insert_one({'_id':'u','credential_version':2 if case=='rotated' else 1,'disabled':case=='disabled'})
       await db.memberships.insert_one({'_id':'membership','user_id':'u','org_id':'org','role':'analyst'})
       await db.sessions.insert_one({'_id':'session','user_id':'u','credential_version':1,'revoked':case=='session_revoked','expires_at':iso(now()+timedelta(hours=-1 if case=='session_expired' else 1))})
-      await db.api_tokens.insert_one({'_id':'token','org_id':'foreign' if case=='token_foreign' else 'org','created_by':'u','membership_id':'membership','credential_version':0 if case=='token_epoch' else 1,'revoked':case=='token_revoked','expires_at':iso(now()+timedelta(hours=-1 if case=='token_expired' else 1)),'scopes':['scan'],'project_ids':['project']})
+      await db.api_tokens.insert_one({'_id':'token','org_id':'foreign' if case=='token_foreign' else 'org','created_by':'u','membership_id':'different' if case=='token_membership' else 'membership','credential_version':0 if case=='token_epoch' else 1,'revoked':case=='token_revoked','expires_at':iso(now()+timedelta(hours=-1 if case=='token_expired' else 1)),'scopes':['read'] if case=='token_scope' else ['scan'],'project_ids':[] if case=='token_projects' else ['project']})
       common={'org_id':'org','created_by':'u','project_id':'project'}
       await db.jobs.insert_one({'_id':'job',**common,'status':'queued','assessment_id':'assessment','asset_id':'asset','scanner':'safe','source':'execution'})
       await db.assessments.insert_one({'_id':'assessment',**common,'status':'queued'})
