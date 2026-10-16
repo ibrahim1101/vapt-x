@@ -37,6 +37,7 @@ api.interceptors.response.use(response => {
   return response;
 }, async error => {
   const original = error.config;
+  if(error.response?.status===403&&error.response?.data?.detail?.code==='email_verification_required'){window.dispatchEvent(new Event('vaptx-verification-required'));}
   // A failed rotation must release readers too; its own 401 can then refresh normally.
   settleCredentialChange(original, false);
   const retryableUrl = typeof original?.url === 'string' && (
@@ -64,7 +65,7 @@ api.interceptors.response.use(response => {
 });
 export const errorText = error => {
   const detail = error.response?.data?.detail;
-  return Array.isArray(detail) ? detail.map(x => x.msg).join('; ') : detail || error.message || 'Request failed';
+  return Array.isArray(detail) ? detail.map(x => x.msg).join('; ') : (detail&&typeof detail==='object'?detail.message:detail) || error.message || 'Request failed';
 };
 export async function download(path, filename) {
   let response;

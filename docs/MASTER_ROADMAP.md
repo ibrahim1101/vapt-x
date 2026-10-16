@@ -19,7 +19,7 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 
 ## Next implementation order
 
-1. Add optional OIDC and explicit deployment policy for registration/mandatory verification. Preserve MFA and epoch/token invalidation semantics; optional email proof and invitations are implemented.
+1. Add optional OIDC. Explicit open/invite-only/closed registration and mandatory verification policies are implemented. Preserve MFA and epoch/token invalidation semantics; optional email proof and invitations are implemented.
 2. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
 3. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
 4. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.

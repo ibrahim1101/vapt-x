@@ -11,6 +11,7 @@ from pymongo import ReturnDocument
 from core import db, get_current_user, now, iso, sha256_hex
 from auth import charge_auth_attempt, account_event
 from mfa import version_query
+from identity_policy import email_verified
 from account_recovery import mail_configuration, send_message, MAIL_SLOTS
 
 router=APIRouter(prefix='/api/auth/email-verification')
@@ -26,7 +27,7 @@ def require_configuration():
     return config
 
 def verified(document):
-    return bool(document.get('email_verified_at') and document.get('email_verified_address')==document.get('email'))
+    return email_verified(document)
 
 def browser_only(user):
     if user.get('_token_scopes') is not None: raise HTTPException(403,'Use a browser session to manage email verification')

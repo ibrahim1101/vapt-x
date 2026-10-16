@@ -1,6 +1,7 @@
 """Validate deployment settings before connecting to services (never echo secrets)."""
 from dataclasses import dataclass
 from urllib.parse import urlsplit
+from identity_policy import validate_environment
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,7 @@ class Settings:
 
     @classmethod
     def from_env(cls, env):
+        validate_environment(env)
         required = ('MONGO_URL', 'DB_NAME', 'JWT_SECRET', 'ADMIN_EMAIL',
                     'ADMIN_PASSWORD', 'FRONTEND_URL', 'INTERNAL_API_URL', 'NMAP_BINARY')
         missing = [key for key in required if not env.get(key, '').strip()]

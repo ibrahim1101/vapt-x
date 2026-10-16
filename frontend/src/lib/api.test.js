@@ -155,3 +155,14 @@ test('does not refresh anonymous verification confirmation failures',async()=>{
  const failure={response:{status:401},config:{url:'/auth/email-verification/confirm'}};
  await expect(errorHandler(failure)).rejects.toBe(failure);expect(api.post).not.toHaveBeenCalled();
 });
+
+test('verification-required responses refresh account state without logging out',async()=>{
+ const listener=jest.fn(),expired=jest.fn();
+ window.addEventListener('vaptx-verification-required',listener);window.addEventListener('vaptx-session-expired',expired);
+ const failure={response:{status:403,data:{detail:{code:'email_verification_required',message:'Verify your registered email.'}}},config:{url:'/projects'}};
+ try{
+  await expect(errorHandler(failure)).rejects.toBe(failure);
+  expect(listener).toHaveBeenCalledTimes(1);expect(expired).not.toHaveBeenCalled();
+  expect(api.post).not.toHaveBeenCalled();expect(errorText(failure)).toBe('Verify your registered email.');
+ }finally{window.removeEventListener('vaptx-verification-required',listener);window.removeEventListener('vaptx-session-expired',expired);}
+});

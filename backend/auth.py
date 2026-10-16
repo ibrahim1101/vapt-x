@@ -14,6 +14,8 @@ from pymongo import ReturnDocument
 from core import (db, BaseDocument, clean, iso, now, new_id, hash_password, verify_password,
                   create_access_token, create_refresh_token, decode_token, get_current_user, get_ctx, Ctx, audit, ROLES)
 
+from identity_policy import policy,email_verified,allow_registration
+
 router = APIRouter(prefix="/api")
 # The application currently requires one API worker (scanner ownership is also local).
 MEMBER_LOCK = asyncio.Lock()
@@ -24,6 +26,7 @@ class Credentials(BaseModel):
     password: str = Field(min_length=10, max_length=72)
     name: str = Field(default="", max_length=100)
     mfa_code: str = Field(default="", max_length=64)
+    invitation_token: str = Field(default="",max_length=128)
 
     @field_validator("password")
     @classmethod
@@ -54,7 +57,8 @@ class MemberInput(BaseModel):
 
 
 def public_user(user):
-    return {k: user.get(k) for k in ("id", "email", "name", "active_org_id", "platform_role")}
+    return {**{k: user.get(k) for k in ("id", "email", "name", "active_org_id", "platform_role")},
+            "email_verified":email_verified(user),"verification_required":policy()["require_verified_email"] and not email_verified(user)}
 
 
 async def insert_identity(collection, fields):
@@ -119,8 +123,13 @@ def set_cookies(response, uid, sid):
         response.set_cookie(name, value, httponly=http_only, secure=not local_cookie_mode(), samesite="lax", max_age=age, path="/")
 
 
+@router.get("/auth/policy")
+async def identity_policy():return policy()
+
+
 @router.post("/auth/register")
 async def register(body: Credentials, response: Response):
+    await allow_registration(db,str(body.email).lower(),body.invitation_token)
     try:
         user = await insert_identity("users", {"email": str(body.email).lower(), "name": body.name or "Analyst", "password_hash": hash_password(body.password), "created_at": iso(), "platform_role": None})
     except DuplicateKeyError:

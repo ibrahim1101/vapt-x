@@ -8,6 +8,7 @@ from pathlib import Path
 import bcrypt
 import jwt
 from dotenv import load_dotenv
+from identity_policy import enforce_workspace_policy
 from fastapi import HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import Settings
@@ -123,6 +124,7 @@ async def get_current_user(request: Request) -> dict:
         if not user or user.get("disabled") or user.get("credential_version",0)!=token.get("credential_version",0):raise HTTPException(401,"Token owner credentials changed")
         user=clean(user)
         user.update(_token_scopes=token["scopes"],_token_org=token["org_id"],_api_token_id=str(token["_id"]),_token_membership_id=token.get("membership_id"))
+        enforce_workspace_policy(user,request.url.path)
         request.state.api_user=user
         return user
     token = request.cookies.get("access_token")
@@ -143,7 +145,9 @@ async def get_current_user(request: Request) -> dict:
     if not user or user.get("disabled") or user.get("credential_version", 0) != sess.get("credential_version", 0):
         raise HTTPException(401, "Session credentials changed")
     user["_sid"] = payload.get("sid")
-    return clean(user)
+    user=clean(user)
+    enforce_workspace_policy(user,request.url.path)
+    return user
 
 
 class Ctx:

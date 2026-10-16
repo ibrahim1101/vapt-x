@@ -24,3 +24,9 @@ test('confirmation requires an explicit action and never exposes the token in th
 test('verification tokens are read only from URL fragments',()=>{
  window.history.replaceState(null,'','/?verify_email_token=query-token#verify_email_token=fragment-token');expect(verificationTokenFromLocation()).toBe('fragment-token');
 });
+
+test('required verification resumes only after confirmed status refresh',async()=>{
+ const verified=jest.fn();api.get.mockResolvedValueOnce({data:{email:'fixture@example.com',enabled:true,verified:false}}).mockResolvedValueOnce({data:{email:'fixture@example.com',enabled:true,verified:true}});
+ await act(async()=>root.render(<EmailVerification onVerified={verified}/>));expect(verified).not.toHaveBeenCalled();
+ await act(async()=>container.querySelector('[data-testid="refresh-email-verification"]').click());expect(verified).toHaveBeenCalledTimes(1);
+});
