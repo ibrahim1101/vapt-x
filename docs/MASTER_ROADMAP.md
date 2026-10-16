@@ -1,6 +1,6 @@
 # VAPT-X engineering roadmap
 
-Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `b48f7f6` passed backend (183 tests with Mongo), frontend (60 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `283f7e4` passed backend (189 tests with Mongo), frontend (65 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Completed increments
 
@@ -10,22 +10,24 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 - Project edits/archive/templates/navigation; asset metadata/bulk registration/navigation/history; assessment cancellation/retry/history/navigation.
 - Finding filters/pagination, bulk triage/owner/history, comments, organization SLA policy, remediation edits and coverage-aware retests.
 - Complete scan-job pagination/search/status/source filters and independently loaded execution records.
+- Evidence/report/scope metadata navigation and organization membership directory with complete server pages, literal search and specific filters.
 - Scanner/import safety, secret/IaC imports, API/SBOM inventory, cached CVE intelligence and private exports/evidence integrity.
 - Versioned PDF templates/preview/branding/custom sections/source snapshots; optional multi-provider AI with bounded redaction/usage.
 - Complete overview counts, dedicated complete remediation/audit navigation and encrypted opt-in signed webhook outbox with retries, rotation/removal and delivery history.
 
 ## Next implementation order
 
-1. Finish complete server navigation for evidence, scope, report and membership registers; retain explicit size/coverage limits in report operations and selectors.
-2. Complete account reset/email verification and invitation lifecycle with explicit delivery configuration; then optional OIDC. Preserve MFA and token invalidation on recovery.
-3. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
-4. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
-5. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.
-6. Add one native ticket/notification integration at a time with credential storage, bounded egress, tenant isolation and explicit activation.
-7. Define retention/quotas, key rewrapping, tamper-proof audit storage and backup/restore drills; implement monitored deployment, rollback and versioned release procedures.
-8. Broaden large-dataset, responsive/keyboard/error-state acceptance. Desktop packaging follows web stability.
+1. Complete account reset/email verification and invitation lifecycle with explicit delivery configuration; then optional OIDC. Preserve MFA and token invalidation on recovery.
+2. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
+3. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
+4. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.
+5. Add one native ticket/notification integration at a time with credential storage, bounded egress, tenant isolation and explicit activation.
+6. Define retention/quotas, key rewrapping, tamper-proof audit storage and backup/restore drills; implement monitored deployment, rollback and versioned release procedures.
+7. Broaden large-dataset, responsive/keyboard/error-state acceptance. Desktop packaging follows web stability.
 
 ## Constraints and handoff
+
+Dedicated registers now query complete server collections. Selection menus and workspace previews remain bounded; report operations retain explicit size and coverage limits.
 
 The deployment remains single-worker. Assessment checks and membership mutation coordination are process-local. Webhook delivery leases are durable but do not make domain writes and enqueue atomic. No production release or multiworker-readiness claim is made.
 
