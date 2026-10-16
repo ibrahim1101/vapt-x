@@ -158,8 +158,10 @@ class Ctx:
         self.role = role
         self.scopes = user.get("_token_scopes")
         self.membership_id = None
+        self.project_ids = None
 
     def can(self, perm: str) -> bool:
+        if self.project_ids is not None and perm in {"integrations", "members"}:return False
         if self.scopes is not None and perm not in self.scopes and "*" not in self.scopes:
             return False
         p = PERMS.get(self.role, set())
@@ -187,19 +189,27 @@ async def get_ctx(request: Request) -> Ctx:
         if await db.membership_revocations.find_one({"_id":org_id+":"+user["id"]}):
             raise HTTPException(401,"Legacy API token membership was removed")
     ctx=Ctx(user,org_id,m["role"])
+    from project_access import membership_projects
+    ctx.project_ids=membership_projects(m)
     ctx.membership_id=str(m["_id"]) if m.get("_id") else None
     return ctx
 
 
 async def get_one(coll: str, ctx: Ctx, oid: str):
-    doc = await db[coll].find_one({"id": oid, "org_id": ctx.org_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, f"{coll[:-1] if coll.endswith('s') else coll} not found")
-    return doc
+    from repository import Repository
+    return await Repository(ctx).get(coll,oid)
 
 
 async def audit(ctx_or_none, action: str, resource_type: str = "", resource_id: str = "", details: dict | None = None, org_id: str | None = None, actor_email: str | None = None, outcome: str = "allow"):
+    from project_access import PROJECT_COLLECTIONS
+    project_id=None
+    if ctx_or_none and resource_type in PROJECT_COLLECTIONS and resource_id:
+        if resource_type=='projects':project_id=resource_id
+        else:
+            resource=await db[resource_type].find_one({'_id':resource_id,'org_id':ctx_or_none.org_id},{'project_id':1})
+            if resource:project_id=resource.get('project_id')
     doc = DomainDocument(
+        **({'project_id':project_id} if project_id else {}),
         org_id=org_id or ctx_or_none.org_id,
         created_by=ctx_or_none.uid if ctx_or_none else "system",
         actor_id=ctx_or_none.uid if ctx_or_none else None,

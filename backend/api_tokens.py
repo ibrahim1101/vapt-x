@@ -39,7 +39,7 @@ async def create_token(body:TokenInput,ctx=Depends(get_ctx)):
         token='vaptx_'+secrets.token_urlsafe(32)
         row=await Repository(ctx).add('api_tokens',{'name':body.name,'scopes':scopes,'credential_version':ctx.user.get('credential_version',0),'membership_id':ctx.membership_id,'token_hash':sha256_hex(token.encode()),
             'token_prefix':token[:12],'expires_at':(datetime.now(timezone.utc)+timedelta(days=body.expires_days)).isoformat(),'revoked':False})
-    return {**metadata(row),'token':token,'notice':'Shown once. Store securely; only its hash is retained. Scope is fixed to this organization and current owner permissions.'}
+    return {**metadata(row),'token':token,'notice':'Shown once. Store securely; only its hash is retained. Scope is fixed to this organization and inherits the owner’s current role and project access on every request.'}
 
 @router.get('/api-tokens')
 async def list_tokens(ctx=Depends(get_ctx)):
@@ -54,7 +54,7 @@ async def revoke_token(token_id:str,ctx=Depends(get_ctx)):
     row=await repo.get('api_tokens',token_id)
     if row['created_by']!=ctx.uid:raise HTTPException(404,'Token not found')
     if not row.get('revoked'):
-        updated=await db.api_tokens.find_one_and_update(repo.query({'_id':token_id,'created_by':ctx.uid,'revoked':False}),
+        updated=await db.api_tokens.find_one_and_update(repo.query({'_id':token_id,'created_by':ctx.uid,'revoked':False},collection='api_tokens'),
             {'$set':{'revoked':True,'revoked_at':iso()}},return_document=ReturnDocument.AFTER)
         if updated:
             row=DomainDocument.from_mongo(updated).model_dump()

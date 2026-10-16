@@ -8,6 +8,7 @@ Start with the [local development guide](docs/WINDOWS_LOCAL_DEV.md) and [testing
 - [Architecture](docs/ARCHITECTURE.md) and [security model](docs/SECURITY_MODEL.md)
 - [Optional integrations](docs/INTEGRATIONS.md)
 - [Optional password recovery](docs/PASSWORD_RECOVERY.md): disabled by default; configured TLS mail delivery is required and existing MFA remains required, as described in the guide
+- [Membership project access](docs/PROJECT_ACCESS.md): administrator grants, live browser/token enforcement and scoped files/counts
 - [Stored secret key rewrapping](docs/KEY_ROTATION.md): operator dry-run/apply tooling for MFA, webhooks and OIDC
 - [Optional linked OIDC sign-in](docs/OIDC.md): explicit linking, PKCE and preserved local MFA/admission policy
 - [Registration and required verification policy](docs/IDENTITY_POLICY.md): explicit open, invitation-only or closed registration; optional workspace admission gate

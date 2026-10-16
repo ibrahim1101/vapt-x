@@ -25,7 +25,7 @@ async def summary(project_id: str | None = None, ctx=Depends(get_ctx)):
         groups('findings','severity',SEVERITIES,{'status':{'$nin':['resolved','false_positive']}}),
         groups('jobs','status',('queued','running','completed','failed','interrupted','cancelled','cancelling')), groups('findings','verification',('observed','imported-unverified','analyst-confirmed')),
         db.assets.count_documents(query, maxTimeMS=10000),
-        db.projects.count_documents(repo.query({'_id':project_id} if project_id else {}),maxTimeMS=10000),
+        db.projects.count_documents(repo.query({'_id':project_id} if project_id else {},collection='projects'),maxTimeMS=10000),
         db.findings.count_documents(query,maxTimeMS=10000),
     )
     counts = {severity:severities.get(severity,0) for severity in SEVERITIES}

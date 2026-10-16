@@ -160,8 +160,8 @@ async def report(assessment_id: str, ctx=Depends(get_ctx), options:ReportOptions
         "name":assessment["name"]+" "+options.template.title()+" Report","version":sequence["value"],
         "template":options.template,"branding":options.branding,"sections":options.model_dump()["sections"],
         "sha256":sha256_hex(raw),"snapshot_sha256":sha256_hex(snapshot),"finding_count":len(findings),"status":"generating"},log=False)
-    await repo.add("report_files",{"report_id":record["id"],"data":base64.b64encode(raw).decode()},log=False)
-    await repo.add("report_snapshots",{"report_id":record["id"],"data":base64.b64encode(snapshot).decode()},log=False)
+    await repo.add("report_files",{"report_id":record["id"],"project_id":project["id"],"data":base64.b64encode(raw).decode()},log=False)
+    await repo.add("report_snapshots",{"report_id":record["id"],"project_id":project["id"],"data":base64.b64encode(snapshot).decode()},log=False)
     result=await repo.update("reports",record["id"],{"status":"ready"},log=False)
     await audit(ctx,"reports.created","reports",record["id"])
     return result

@@ -1,0 +1,11 @@
+# Custom roles and service identities: design boundaries
+
+Current authorization combines organization membership, a fixed role, current project admission and (for bearer credentials) token action scopes plus membership identity/credential epoch. Project selection is implemented; custom roles and independent service identities are not yet implemented.
+
+Custom roles should use immutable role identifiers with an explicit allowlist of existing action permissions. They must never inherit a wildcard implicitly or allow a caller to grant permissions they do not possess. An organization must retain a built-in administrator able to recover policy. Project-role overrides need an explicit intersection/override rule and complete negative tests across queries, aggregates, exports, files, AI and execution before release. Role definitions and assignment changes need durable coordination, conditional writes and auditable versions rather than adding process-local caches.
+
+Service identities should be organization-owned principals, separate from human account passwords, MFA and recovery. Each credential should have immutable action and project caps, expiry, one-time secret display/hash-only storage, explicit administrator ownership, rotation/revocation and last-use metadata without raw secrets. A human owner losing membership must not silently transfer authority; define administrator handoff and orphan disablement before provisioning. Human API tokens currently inherit live human membership and are not service identities.
+
+Before broadening token access, intersect credential caps with current principal grants on every request, enforce the same repository project boundary, and reject all account/membership/credential administration families. Define whether archived/deleted projects invalidate grants, and test removed/rejoined memberships, stale policy versions, concurrent revoke/mint, tenant isolation and queued jobs. A running request may finish unless an execution-specific cancellation boundary is added.
+
+These are implementation requirements for a future increment, not available product controls or a production-readiness claim. The supported deployment remains one API worker, and operational release/restore acceptance remains separate.

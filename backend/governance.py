@@ -40,6 +40,8 @@ async def get_sla_policy(ctx=Depends(get_ctx)):
 @router.put('/sla-policy')
 async def update_sla_policy(body:SLAPolicyInput,ctx=Depends(get_ctx)):
     ctx.require('authorize')
+    from project_access import require_all_projects
+    require_all_projects(ctx)
     await db.sla_policies.update_one({'org_id':ctx.org_id},{'$set':{'days':body.model_dump(),
         'updated_at':iso(),'updated_by':ctx.uid}},upsert=True)
     await audit(ctx,'sla.policy_updated','sla_policies',ctx.org_id,{'days':body.model_dump()})

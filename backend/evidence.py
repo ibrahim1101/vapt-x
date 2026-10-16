@@ -52,7 +52,7 @@ async def upload_chunk(evidence_id: str, index: int, body: ChunkInput, ctx=Depen
     if previous:
         await repo.update("evidence_chunks", previous[0]["id"], {"data": body.data}, log=False)
     else:
-        await repo.add("evidence_chunks", {"evidence_id": evidence_id, "index": index, "data": body.data}, log=False)
+        await repo.add("evidence_chunks", {"evidence_id": evidence_id, "project_id": item["project_id"], "index": index, "data": body.data}, log=False)
     return {"received": index}
 
 

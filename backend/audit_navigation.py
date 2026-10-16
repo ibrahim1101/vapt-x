@@ -30,4 +30,4 @@ async def list_events(search:str=Query(default='',max_length=120),action:str=Que
     page=await Repository(ctx).page('audit_events',query,offset=offset,limit=limit)
     allowed=('id','action','actor_id','actor_email','api_token_id','resource_type','resource_id','outcome','created_at','details')
     page['items']=[{key:row.get(key) for key in allowed} for row in page['items']]
-    return {**page,'notice':'Organization-wide events; the project selector does not narrow this trail. Dates use UTC and include the end date. No application edit/delete controls; records are not a tamper-proof external ledger.'}
+    return {**page,'notice':('Only events attributed to your allowed projects are visible; older unattributed and organization-wide events are omitted. ' if ctx.project_ids is not None else 'Organization-wide events. ')+'The page project selector does not further narrow this trail. Dates use UTC and include the end date. No application edit/delete controls; records are not a tamper-proof external ledger.'}

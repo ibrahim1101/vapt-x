@@ -165,3 +165,6 @@ app.include_router(invitations_router)
 
 from oidc import router as oidc_router
 app.include_router(oidc_router)
+
+from project_membership import router as project_membership_router
+app.include_router(project_membership_router)

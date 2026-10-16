@@ -9,7 +9,7 @@ class AnalyticsTests(unittest.IsolatedAsyncioTestCase):
     async def test_complete_counts_scoped_and_bounded_groups(self):
         ctx=Ctx({'id':'viewer'},'tenant','viewer')
         with patch.object(analytics,'db') as db,patch.object(analytics,'Repository') as repository:
-            repository.return_value.query.side_effect=lambda filters=None:{**(filters or {}),'org_id':'tenant'}
+            repository.return_value.query.side_effect=lambda filters=None,**kwargs:{**(filters or {}),'org_id':'tenant'}
             repository.return_value.get=AsyncMock()
             collection=MagicMock();db.__getitem__.return_value=collection
             collection.aggregate.return_value.to_list=AsyncMock(side_effect=[
