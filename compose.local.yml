@@ -1,6 +1,23 @@
 services:
+  web:
+    profiles: ["web"]
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_BACKEND_URL: ${VAPTX_PUBLIC_API_URL:-}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${VAPTX_WEB_PORT:-3000}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   api:
-    profiles: ["api"]
+    profiles: ["api", "web"]
     build:
       context: ./backend
       args:
