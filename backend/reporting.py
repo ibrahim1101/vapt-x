@@ -104,7 +104,7 @@ def build_pdf(project, assessment, findings, jobs, evidence, scopes, tasks, opti
                 story.append(p(f"Evidence: {item['filename']} · SHA-256 {item['sha256']}", "TinyText"))
     for section in options.sections:
         story.extend([Spacer(1,16),p(section.heading,"Heading2"),p(section.text)])
-    story.extend([Spacer(1, 22), p("Limitations", "Heading2"), p("Point-in-time, non-exploitative assessment. Unassessed services, skipped checks, failed jobs and external dependencies limit coverage. A missing observation on retest does not establish remediation. Only test systems for which you hold explicit authorization.")])
+    story.append(KeepTogether([Spacer(1, 22), p("Limitations", "Heading2"), p("Point-in-time, non-exploitative assessment. Unassessed services, skipped checks, failed jobs and external dependencies limit coverage. A missing observation on retest does not establish remediation. Only test systems for which you hold explicit authorization.")]))
     def footer(canvas, document):
         canvas.setFont("VaptSans", 8)
         canvas.setFillColor(colors.HexColor("#64748b"))
