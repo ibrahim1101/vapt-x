@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `a736efa62c0aacb65a6e3f6c19e6f870352de8b2`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
+Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `b48f7f6989210e59b477e2e22931370ef1c6e4c9`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
 | Area | Implemented and exercised | Remaining limits |
 |---|---|---|
@@ -36,10 +36,10 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 
 | Check | Result | Run |
 |---|---|---|
-| Backend Python 3.11/3.12 with MongoDB | 182 passed | [38883645967](https://github.com/ibrahim1101/vapt-x/actions/runs/38883645967) |
-| Frontend unit/components and production build | 59 passed, 22 suites; build passed | [38883645941](https://github.com/ibrahim1101/vapt-x/actions/runs/38883645941) |
-| Docker smoke | Passed | [38883645987](https://github.com/ibrahim1101/vapt-x/actions/runs/38883645987) |
-| Chromium against Nginx/Compose | Passed | [38883645949](https://github.com/ibrahim1101/vapt-x/actions/runs/38883645949) |
+| Backend Python 3.11/3.12 with MongoDB | 183 passed | [38886064031](https://github.com/ibrahim1101/vapt-x/actions/runs/38886064031) |
+| Frontend unit/components and production build | 60 passed, 23 suites; build passed | [38886064198](https://github.com/ibrahim1101/vapt-x/actions/runs/38886064198) |
+| Docker smoke | Passed | [38886064328](https://github.com/ibrahim1101/vapt-x/actions/runs/38886064328) |
+| Chromium against Nginx/Compose | Passed | [38886064427](https://github.com/ibrahim1101/vapt-x/actions/runs/38886064427) |
 
 Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
 
