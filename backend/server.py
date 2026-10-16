@@ -26,6 +26,7 @@ async def lifespan(app):
     webhook_worker=None
     try:
         from account_recovery import mail_configuration
+        mail_configuration('EMAIL_VERIFICATION_ENABLED')
         mail_configuration()  # Enabled mail delivery must be valid before accepting requests.
         await db.command('ping')
         await seed_admin()
@@ -39,6 +40,8 @@ async def lifespan(app):
         await db.api_tokens.create_index('token_hash',unique=True)
         await db.account_recovery.create_index('token_hash',unique=True)
         await db.account_recovery.create_index('expires_at',expireAfterSeconds=0)
+        await db.email_verifications.create_index('token_hash',unique=True)
+        await db.email_verifications.create_index('expires_at',expireAfterSeconds=0)
         await db.api_tokens.create_index([('org_id',1),('created_by',1),('revoked',1),('expires_at',1)])
         await db.sla_policies.create_index('org_id',unique=True)
         await db.finding_comments.create_index([('org_id',1),('finding_id',1),('created_at',-1),('_id',-1)])
@@ -77,7 +80,7 @@ async def request_security(request: Request, call_next):
 
         if request.headers.get('origin') != origin:
             return JSONResponse({'detail': 'Untrusted request origin'}, status_code=403)
-        if request.url.path not in {'/api/auth/login', '/api/auth/register', '/api/auth/recovery/request', '/api/auth/recovery/complete'}:
+        if request.url.path not in {'/api/auth/login', '/api/auth/register', '/api/auth/recovery/request', '/api/auth/recovery/complete', '/api/auth/email-verification/confirm'}:
             csrf = request.cookies.get('csrf', '')
             if not csrf or not secrets.compare_digest(csrf, request.headers.get('x-csrf-token', '')):
                 return JSONResponse({'detail': 'CSRF verification failed'}, status_code=403)
@@ -146,3 +149,6 @@ app.include_router(register_navigation_router)
 
 from account_recovery import router as account_recovery_router
 app.include_router(account_recovery_router)
+
+from account_verification import router as account_verification_router
+app.include_router(account_verification_router)

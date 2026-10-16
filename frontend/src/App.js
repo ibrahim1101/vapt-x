@@ -19,8 +19,8 @@ const emptyData = {projects:[],scopes:[],assets:[],assessments:[],jobs:[],findin
 
 export default function App() {
   const [recoveryAttempt,setRecoveryAttempt]=useState(0);
-  const [recoveryLanding,setRecoveryLanding]=useState(()=>!!new URLSearchParams(window.location.hash.slice(1)).get('reset_token'));
-  useEffect(()=>{const followRecoveryLink=()=>{if(new URLSearchParams(window.location.hash.slice(1)).get('reset_token')){setRecoveryLanding(true);setRecoveryAttempt(value=>value+1);}};window.addEventListener('hashchange',followRecoveryLink);return()=>window.removeEventListener('hashchange',followRecoveryLink);},[]);
+  const [recoveryLanding,setRecoveryLanding]=useState(()=>['reset_token','verify_email_token'].some(key=>new URLSearchParams(window.location.hash.slice(1)).get(key)));
+  useEffect(()=>{const followRecoveryLink=()=>{if(['reset_token','verify_email_token'].some(key=>new URLSearchParams(window.location.hash.slice(1)).get(key))){setRecoveryLanding(true);setRecoveryAttempt(value=>value+1);}};window.addEventListener('hashchange',followRecoveryLink);return()=>window.removeEventListener('hashchange',followRecoveryLink);},[]);
   const [user,setUser]=useState(null),[boot,setBoot]=useState(true),[orgId,setOrgId]=useState(localStorage.getItem('vaptx-org')||''),[data,setData]=useState(emptyData),[capabilities,setCapabilities]=useState({}),[members,setMembers]=useState([]);
   const [page,setPage]=useState('Overview'),[project,setProject]=useState(''),[modal,setModal]=useState(null),[mobile,setMobile]=useState(false),[command,setCommand]=useState(false),[query,setQuery]=useState(''),[loading,setLoading]=useState(false),[loadError,setLoadError]=useState(''),[theme,setTheme]=useState(localStorage.getItem('vaptx-theme')||'dark');
   const workspaceRequest=useRef(0);

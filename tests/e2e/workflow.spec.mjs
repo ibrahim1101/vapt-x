@@ -475,5 +475,12 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await expect(page.getByRole('alert')).toContainText('Password recovery is not configured');
   await page.getByTestId('recovery-back').click();
   await expect(page.getByTestId('field-password')).toBeVisible();
+  await page.goto('/#verify_email_token='+('invalid-synthetic-token-'.repeat(2)));
+  await expect(page.getByRole('heading',{name:'Verify your email address'})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>window.location.hash)).toBe('');
+  await page.getByTestId('form-submit').click();
+  await expect(page.getByRole('alert')).toContainText('Email verification is not configured');
+  await page.getByTestId('verification-back').click();
+  await expect(page.getByTestId('field-password')).toBeVisible();
   expect(pageErrors).toEqual([]);
 });

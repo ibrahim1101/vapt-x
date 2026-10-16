@@ -21,8 +21,8 @@ NOTICE = 'If an eligible account matches that email, recovery instructions will 
 MAIL_SLOTS = asyncio.Semaphore(3)
 INVALID = 'The recovery link is invalid, expired or already used. Request a new link.'
 
-def mail_configuration():
-    if os.environ.get('ACCOUNT_RECOVERY_ENABLED') != '1': return None
+def mail_configuration(enabled_variable='ACCOUNT_RECOVERY_ENABLED'):
+    if os.environ.get(enabled_variable) != '1': return None
     host = os.environ.get('RECOVERY_SMTP_HOST','').strip()
     mode = os.environ.get('RECOVERY_SMTP_MODE','ssl')
     if not host or any(c.isspace() for c in host) or mode not in {'ssl','starttls'}:
@@ -44,12 +44,16 @@ def require_configuration():
     return config
 
 def send_mail(config, recipient, link):
+    send_message(config,recipient,'VAPT-X password recovery',
+        'Use this one-time link within 15 minutes to choose a new password. '
+        'An enabled authenticator or recovery code is still required.\n\n'+link+
+        '\n\nIf you did not request this, ignore this email. No password has changed.')
+
+def send_message(config, recipient, subject, text):
     message = EmailMessage()
     message['From'] = config['sender'];message['To'] = recipient
-    message['Subject'] = 'VAPT-X password recovery'
-    message.set_content('Use this one-time link within 15 minutes to choose a new password. '
-                        'An enabled authenticator or recovery code is still required.\n\n'+link+
-                        '\n\nIf you did not request this, ignore this email. No password has changed.')
+    message['Subject'] = subject
+    message.set_content(text)
     context = ssl.create_default_context()
     connection = smtplib.SMTP_SSL(config['host'],config['port'],timeout=10,context=context) if config['mode']=='ssl' else smtplib.SMTP(config['host'],config['port'],timeout=10)
     with connection as smtp:
