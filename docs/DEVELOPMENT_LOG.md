@@ -293,3 +293,7 @@ Final acceptance at code `0a78ac3bff83a567009e68984629e94a6cf0a0a7`:
 - Local full suite after adding the persistence test: **250 passed, 13 Mongo-dependent skipped, 154 subtests passed**; dependency consistency and whitespace checks passed.
 
 Updated the architecture to remove outdated baseline claims about unavailable cancellation/webhook workflows, synchronous PDF rendering and missing aggregate/register work. All acceptance used synthetic data. No live external execution, merge, release or production deployment occurred. Custom roles/service identities, durable assessment ownership and the remaining operational roadmap are still incomplete.
+
+## Cloud/configuration import expansion
+
+Implemented Prowler ASFF failed resource imports and Trivy mixed vulnerability/misconfiguration/secret imports through the existing scope-authorized workflow. Added source metadata display, raw-report omission, source-code/match omission, strict status/range/schema validation and cumulative size/row limits. Added parser, frontend, Mongo persistence/authorization/deduplication tests and Chromium import fixtures. Local focused parsers: 31 passed with 91 subtests; full local suite before the additional Mongo test: 259 passed, 13 skipped, 179 subtests. CI acceptance pending.

@@ -16,7 +16,7 @@ from importers import finding, parse_report
 JOB_LOCK = asyncio.Lock()
 ACTIVE_CHECKS = {}  # Single-worker managed child tasks, keyed by organization/job.
 
-SCANNERS = {"safe", "nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov", "openapi", "cyclonedx", "spdx"}
+SCANNERS = {"safe", "nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov", "prowler", "openapi", "cyclonedx", "spdx"}
 
 
 def target_host(target):

@@ -51,7 +51,7 @@ def _json(content):
 
 
 def parse_report(scanner, content):
-    if scanner not in {"nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov"}:
+    if scanner not in {"nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov", "prowler"}:
         raise ValueError("Unsupported scanner report format")
     if not isinstance(content, str) or not content.strip():
         raise ValueError("Report must contain text")
@@ -63,6 +63,11 @@ def parse_report(scanner, content):
         if len(rows) >= MAX_FINDINGS:
             raise ValueError("Maximum 2,000 findings per import")
         rows.append(row)
+
+    if scanner == "prowler":
+        from import_extensions import prowler_findings
+        prowler_findings(_json(content), append)
+        return rows
 
     if scanner == "gitleaks":
         for item in _array(_json(content), "Gitleaks report"):
@@ -175,6 +180,9 @@ def parse_report(scanner, content):
                 rule = _required(x.get("VulnerabilityID"), "Trivy VulnerabilityID")
                 package = _text(x.get("PkgName"), "Trivy PkgName")
                 append(finding(f"{rule} · {package}", x.get("Severity", "info"), rule + ":" + package, _text(group.get("Target"), "Trivy Target"), _text(x.get("Description"), "Trivy Description", _text(x.get("Title"), "Trivy Title")), f"Installed: {x.get('InstalledVersion') or 'unknown'}. Fixed version: {x.get('FixedVersion') or 'No fixed version reported'}"))
+        from import_extensions import trivy_extras, redact_known
+        matches = trivy_extras(data, append)
+        rows = redact_known(rows, matches)
     elif scanner == "zap":
         for item in _array(data.get("site"), "ZAP site"):
             site = _object(item, "ZAP site")

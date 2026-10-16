@@ -278,16 +278,18 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   const retried = await retryResponse.json();
   expect(retried.retry_of).toBe(retest.id);
   await expect(page.getByTestId(`assessment-card-${retried.id}`)).toContainText('draft');
-  for (const [scanner, fixture] of [
+  for (const [scanner, fixture, expectedCount=1] of [
     ['gitleaks', [{RuleID:'synthetic-secret-rule',File:'fixture.env',StartLine:1,Description:'Synthetic secret candidate',Secret:'synthetic-secret-do-not-store',Match:'KEY=synthetic-secret-do-not-store'}]],
     ['checkov', {results:{failed_checks:[{check_id:'CKV_SYNTHETIC_1',check_name:'Synthetic IaC check',file_path:'fixture.tf',file_line_range:[1,2],code_block:[[1,'synthetic-secret-do-not-store']]}]}}],
+    ['trivy', {Results:[{Target:'synthetic.tf',Misconfigurations:[{ID:'AVD-SYNTHETIC-1',Title:'Synthetic Trivy policy',Status:'FAIL',Severity:'MEDIUM',Description:'Synthetic policy guidance',CauseMetadata:{StartLine:1,EndLine:1,Code:{Lines:[{Content:'synthetic-secret-do-not-store'}]}}}],Secrets:[{RuleID:'synthetic-key',Severity:'HIGH',StartLine:2,EndLine:2,Match:'synthetic-secret-do-not-store',Code:{Lines:[{Content:'synthetic-secret-do-not-store'}]}}]}]}, 2],
+    ['prowler', [{Id:'synthetic-asff',GeneratorId:'prowler-synthetic_policy',ProductArn:'arn:aws:securityhub:us-east-1::product/prowler/prowler',AwsAccountId:'000000000000',Title:'Synthetic cloud policy',Description:'Synthetic imported policy failure',Severity:{Label:'HIGH'},Compliance:{Status:'FAILED'},Resources:[{Id:'arn:aws:s3:::synthetic-bucket',Type:'AwsS3Bucket',Region:'us-east-1',Tags:{private:'synthetic-secret-do-not-store'}}]}]],
   ]) {
     await page.getByTestId(`import-${retried.id}`).click();
     await page.getByTestId('field-asset_id').selectOption(asset.id);
     await page.getByTestId('field-scanner').selectOption(scanner);
     await page.getByTestId('field-content').fill(JSON.stringify(fixture));
     const imported = await saveModal(page, '/imports');
-    expect(imported.finding_count).toBe(1);
+    expect(imported.finding_count).toBe(expectedCount);
     expect(imported.raw_output).not.toContain('synthetic-secret-do-not-store');
   }
 

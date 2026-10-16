@@ -124,7 +124,7 @@ class ScanInput(BaseModel):
 class ImportInput(BaseModel):
     assessment_id: str
     asset_id: str
-    scanner: Literal["nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov"]
+    scanner: Literal["nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov", "prowler"]
     content: str = Field(min_length=2, max_length=2_000_000)
 
 
@@ -178,7 +178,7 @@ class TaskUpdate(BaseModel):
 @router.get("/capabilities")
 async def capabilities(ctx=Depends(get_ctx)):
     ctx.require("read")
-    return {"safe": True, "nmap": bool(shutil.which(os.environ["NMAP_BINARY"])), "inventory_imports": ["openapi", "cyclonedx", "spdx"], "imports": ["nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov"], "ai": any(provider["available"] for provider in public_configuration()), "limitations": ["Nmap uses TCP connect on four web ports only; no exploit scripts.", "Remote private networks are blocked. Only the managed training target may use loopback.", "Imports are scanner-authored, unverified evidence, not a fresh scan.", "Interrupted jobs are marked interrupted after a worker restart; re-run manually."]}
+    return {"safe": True, "nmap": bool(shutil.which(os.environ["NMAP_BINARY"])), "inventory_imports": ["openapi", "cyclonedx", "spdx"], "imports": ["nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov", "prowler"], "ai": any(provider["available"] for provider in public_configuration()), "limitations": ["Nmap uses TCP connect on four web ports only; no exploit scripts.", "Remote private networks are blocked. Only the managed training target may use loopback.", "Imports are scanner-authored, unverified evidence, not a fresh scan.", "Interrupted jobs are marked interrupted after a worker restart; re-run manually."]}
 
 
 @router.get("/workspace")
@@ -465,7 +465,7 @@ async def import_scan(body: ImportInput, ctx=Depends(get_ctx)):
     async with JOB_LOCK:
         assessment = await repo.get("assessments", body.assessment_id)
         await validate_scope(repo, assessment, asset, body.scanner)
-        job = await repo.add("jobs", {"assessment_id": assessment["id"], "asset_id": asset["id"], "project_id": assessment["project_id"], "scanner": body.scanner, "source": "import", "status": "completed", "raw_output": "Raw report omitted to avoid retaining secret values or code blocks" if body.scanner in {"gitleaks", "checkov"} else body.content, "checks": [], "logs": ["Imported scanner-authored output. Not independently verified; asset association declared by uploader."], "finished_at": iso()})
+        job = await repo.add("jobs", {"assessment_id": assessment["id"], "asset_id": asset["id"], "project_id": assessment["project_id"], "scanner": body.scanner, "source": "import", "status": "completed", "raw_output": "Raw report omitted to avoid retaining secret values or code blocks" if body.scanner in {"gitleaks", "checkov", "trivy", "prowler"} else body.content, "checks": [], "logs": ["Imported scanner-authored output. Not independently verified; asset association declared by uploader."], "finished_at": iso()})
         count = await store_findings(repo, assessment, asset, job, rows)
         await repo.update("assessments", assessment["id"], {"status": "review"}, log=False)
         return await repo.update("jobs", job["id"], {"finding_count": count}, log=False)
