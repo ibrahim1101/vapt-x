@@ -2,10 +2,11 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { api } from './lib/api';
+import { AuthScreen,Onboarding } from './components/access';
 
 jest.mock('./lib/api', () => ({ api: { get: jest.fn(), post: jest.fn() }, errorText: error => error.message }));
 jest.mock('sonner', () => ({ Toaster: () => null, toast: { error: jest.fn() } }));
-jest.mock('./components/access', () => ({ Brand: () => null, AuthScreen: () => null, Onboarding: () => null }));
+jest.mock('./components/access', () => ({ Brand: () => null, AuthScreen: jest.fn(() => null), Onboarding: jest.fn(() => null) }));
 jest.mock('./components/workspace-ui', () => ({ Action: () => null, Modal: () => null }));
 jest.mock('./components/workspace-forms', () => ({ ResourceModal: () => null, FindingModal: () => null }));
 jest.mock('./components/dashboard', () => ({
@@ -27,6 +28,8 @@ let container, root;
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
+  AuthScreen.mockClear();Onboarding.mockClear();
+  window.history.replaceState(null,'','/');
   api.get.mockReset();
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -35,6 +38,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  window.history.replaceState(null,'','/');
 });
 
 test('fetches the selected project and ignores older workspace responses', async () => {
@@ -57,4 +61,27 @@ test('fetches the selected project and ignores older workspace responses', async
   expect(container.querySelector('[data-testid="loaded-findings"]').textContent).toBe('Current project');
   await act(async () => finishProjectA({ data: workspace([{ id: 'a', project_id: 'project-a', title: 'Stale project' }]) }));
   expect(container.querySelector('[data-testid="loaded-findings"]').textContent).toBe('Current project');
+});
+
+
+test('an invitation landing remains available to a signed-in account without organizations',async()=>{
+ window.history.replaceState(null,'','/#invite_token=synthetic-fragment-token');
+ api.get.mockResolvedValue({data:{id:'invitee',name:'Invitee',email:'fixture@example.com',organizations:[]}});
+ await act(async()=>root.render(<App/>));
+ expect(AuthScreen).toHaveBeenCalled();expect(AuthScreen.mock.calls.at(-1)[0].currentUser.email).toBe('fixture@example.com');expect(Onboarding).not.toHaveBeenCalled();
+});
+
+test('same-document invitations survive switching accounts and signing in before acceptance',async()=>{
+ let account={id:'first',name:'First',email:'first@example.com',active_org_id:'org-a',organizations:[{id:'org-a',name:'First org',role:'viewer'}]};
+ api.get.mockImplementation(url=>Promise.resolve({data:url==='/auth/me'?account:url==='/workspace'?workspace([]):url==='/members'?[]:{}}));
+ await act(async()=>root.render(<App/>));
+ await act(async()=>{window.history.replaceState(null,'','/#invite_token=synthetic-fragment-token');window.dispatchEvent(new HashChangeEvent('hashchange'));});
+ expect(AuthScreen.mock.calls.at(-1)[0].currentUser.id).toBe('first');
+ await act(async()=>AuthScreen.mock.calls.at(-1)[0].onAccountSwitch());
+ account={id:'invitee',name:'Invitee',email:'invitee@example.com',organizations:[]};
+ await act(async()=>AuthScreen.mock.calls.at(-1)[0].onAuthenticated());
+ expect(AuthScreen.mock.calls.at(-1)[0].currentUser.id).toBe('invitee');expect(Onboarding).not.toHaveBeenCalled();
+ account={...account,active_org_id:'invited-org',organizations:[{id:'invited-org',name:'Invited org',role:'viewer'}]};localStorage.setItem('vaptx-org','invited-org');
+ await act(async()=>AuthScreen.mock.calls.at(-1)[0].onInvitationAccepted());
+ expect(container.querySelector('[data-testid="organization-select"]').value).toBe('invited-org');
 });

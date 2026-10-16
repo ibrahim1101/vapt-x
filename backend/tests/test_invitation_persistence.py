@@ -16,6 +16,7 @@ class InvitationPersistenceTests(unittest.TestCase):
             from unittest.mock import patch
             from pymongo import MongoClient
             from fastapi.testclient import TestClient
+            from httpx import Cookies
             database='vaptx_invite_'+uuid.uuid4().hex
             os.environ.update(MONGO_URL=os.environ['MONGO_TEST_URL'],DB_NAME=database,JWT_SECRET='synthetic-invitation-'*4,
                 ADMIN_EMAIL='owner@example.com',ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
@@ -40,7 +41,7 @@ class InvitationPersistenceTests(unittest.TestCase):
                     admin=register('inviter@example.com')
                     org=client.post('/api/organizations',headers=headers(),json={'name':'Invitation organization'}).json()
                     other=client.post('/api/organizations',headers=headers(),json={'name':'Other organization'}).json()
-                    admin_cookies=dict(client.cookies)
+                    admin_cookies=Cookies(client.cookies)
                     item,raw=invite('recipient@example.com')
                     stored=mongo[database].invitations.find_one({'_id':item['id']})
                     assert stored['token_hash']==hashlib.sha256(raw.encode()).hexdigest() and raw not in str(stored)
@@ -52,7 +53,7 @@ class InvitationPersistenceTests(unittest.TestCase):
                     recipient=register('recipient@example.com')
                     personal=client.post('/api/organizations',headers=headers(),json={'name':'Recipient personal organization'}).json()
                     personal_token=client.post('/api/api-tokens',headers=headers(personal['id']),json={'name':'Personal token','scopes':['read']}).json()['token']
-                    recipient_cookies=dict(client.cookies)
+                    recipient_cookies=Cookies(client.cookies)
                     preview=client.post('/api/auth/invitations/preview',headers=headers(),json={'token':raw})
                     assert preview.status_code==200 and preview.json()['organization_name']=='Invitation organization',preview.text
                     assert not mongo[database].memberships.find_one({'org_id':org['id'],'user_id':recipient['id']})
@@ -75,7 +76,7 @@ class InvitationPersistenceTests(unittest.TestCase):
                     assert client.get('/api/projects',headers={'authorization':'Bearer '+old_token}).status_code==401
                     assert client.get('/api/projects',headers={'authorization':'Bearer '+personal_token}).status_code==200
                     switch(admin_cookies);existing,pending=invite('existing@example.com','viewer')
-                    existing_user=register('existing@example.com');existing_cookies=dict(client.cookies)
+                    existing_user=register('existing@example.com');existing_cookies=Cookies(client.cookies)
                     switch(admin_cookies)
                     assert client.post('/api/members',headers=headers(org['id']),json={'email':'existing@example.com','role':'security_lead'}).status_code==200
                     switch(existing_cookies);assert accept(pending).status_code==200
@@ -87,14 +88,14 @@ class InvitationPersistenceTests(unittest.TestCase):
                     mongo[database].invitations.update_one({'_id':expired['id']},{'$set':{'expires_at':datetime.now(timezone.utc)-timedelta(minutes=1)}})
                     register('expired@example.com');assert accept(expired_raw).status_code==400
                     switch(admin_cookies);stale,stale_raw=invite('stale@example.com')
-                    stale_user=register('stale@example.com');stale_cookies=dict(client.cookies)
+                    stale_user=register('stale@example.com');stale_cookies=Cookies(client.cookies)
                     mongo[database].memberships.update_one({'org_id':org['id'],'user_id':admin['id']},{'$set':{'role':'viewer'}})
                     assert accept(stale_raw).status_code==400
                     mongo[database].memberships.update_one({'org_id':org['id'],'user_id':admin['id']},{'$set':{'role':'org_admin'}})
                     switch(admin_cookies)
                     r=client.post('/api/auth/password',headers=headers(),json={'current_password':'synthetic-password','new_password':'synthetic-new-password'})
                     assert r.status_code==200,r.text
-                    admin_cookies=dict(client.cookies);switch(stale_cookies);assert accept(stale_raw).status_code==400
+                    admin_cookies=Cookies(client.cookies);switch(stale_cookies);assert accept(stale_raw).status_code==400
                     switch(admin_cookies)
                     mongo[database].invitations.insert_many([{'_id':'invite-page-'+str(i),'org_id':org['id'],'created_by':admin['id'],
                         'created_at':'2020-01-01T12:00:00+00:00','email':'nav.*@example.com','role':'viewer','status':'pending',

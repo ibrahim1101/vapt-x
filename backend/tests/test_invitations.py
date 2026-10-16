@@ -57,3 +57,10 @@ class InvitationTests(unittest.IsolatedAsyncioTestCase):
     def test_expired_pending_metadata_never_exposes_token(self):
         result=invitations.metadata({'id':'i','status':'pending','expires_at':now()-timedelta(seconds=1),'token_hash':'private'})
         self.assertEqual(result['status'],'expired');self.assertNotIn('token_hash',result)
+
+    async def test_disabling_invitations_blocks_preview_and_acceptance(self):
+        with patch.object(invitations,'configuration',return_value=None),patch.object(invitations,'db') as db:
+            for action in (invitations.preview_invitation,invitations.accept_invitation):
+                with self.assertRaises(HTTPException) as error:await action(invitations.Acceptance(token='t'*43),USER)
+                self.assertEqual(error.exception.status_code,503)
+            db.invitations.find_one.assert_not_called()
