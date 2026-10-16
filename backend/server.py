@@ -30,6 +30,7 @@ async def lifespan(app):
         await db.sessions.create_index([('user_id', 1), ('revoked', 1), ('created_at', -1)])
         for collection in ('project_templates', 'projects', 'scopes', 'assets', 'assessments', 'jobs', 'findings', 'tasks', 'evidence', 'evidence_chunks', 'reports', 'report_files', 'audit_events', 'ai_sessions'):
             await db[collection].create_index([('org_id', 1), ('created_at', -1)])
+        await db.audit_events.create_index([('org_id',1),('created_at',-1),('_id',-1)])
         await db.findings.create_index([('org_id', 1), ('project_id', 1), ('created_at', -1), ('_id', -1)])
         await db.webhook_deliveries.create_index([('status',1),('next_attempt_at',1),('lease_expires_at',1),('created_at',1)])
         await db.webhook_deliveries.create_index([('org_id',1),('webhook_id',1),('created_at',-1)])
@@ -66,7 +67,7 @@ async def request_security(request: Request, call_next):
         # API tokens never enter account/session/organization administration or
         # mint credentials. New domain families must be explicitly enabled here.
         family=request.url.path.removeprefix('/api/').split('/')[0]
-        if not request.url.path.startswith('/api/') or family not in {'workspace','capabilities','projects','project-templates','assets','assessments','scopes','scans','imports','inventory-imports','jobs','findings','tasks','evidence','reports','sla-policy','ai','analytics'}:
+        if not request.url.path.startswith('/api/') or family not in {'workspace','capabilities','projects','project-templates','assets','assessments','scopes','scans','imports','inventory-imports','jobs','findings','tasks','evidence','reports','sla-policy','ai','analytics','audit-events'}:
             return JSONResponse({'detail':'API token is not permitted on this endpoint'},status_code=403)
     if not bearer and request.method in {'POST', 'PATCH', 'PUT', 'DELETE'}:
 
@@ -132,3 +133,6 @@ app.include_router(mfa_router)
 
 from account_admin import router as account_admin_router
 app.include_router(account_admin_router)
+
+from audit_navigation import router as audit_navigation_router
+app.include_router(audit_navigation_router)

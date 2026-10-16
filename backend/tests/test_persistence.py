@@ -363,6 +363,13 @@ class PersistenceTests(unittest.TestCase):
                     response=client.patch('/api/tasks/'+task_page['items'][0]['id'],headers=headers(),json={'status':'done'})
                     assert response.status_code==200,response.text
                     assert client.get('/api/tasks',params={'project_id':project['id'],'search':'literal .*','status':'todo','overdue':'true'}).json()['total']==1004
+                    mongo[database].audit_events.insert_many([{'_id':'audit-page-'+str(i),'org_id':org['id'],'created_by':user['id'],
+                        'created_at':'2020-01-01T12:00:00+00:00','action':'literal .* audit','actor_email':'audit-fixture@example.com',
+                        'resource_type':'synthetic','resource_id':'fixture','outcome':'allow','details':{'reason':'Synthetic fixture'}} for i in range(1005)])
+                    audit_page=client.get('/api/audit-events',params={'search':'literal .*','actor':'audit-fixture','resource_type':'synthetic','outcome':'allow','from_date':'2020-01-01','to_date':'2020-01-01','offset':1000}).json()
+                    assert audit_page['total']==1005 and len(audit_page['items'])==5 and not audit_page['has_more'],audit_page
+                    assert all(row['details']['reason']=='Synthetic fixture' for row in audit_page['items'])
+                    assert client.get('/api/audit-events',params={'from_date':'2020-01-02','to_date':'2020-01-01'}).status_code==422
                     mongo[database].projects.insert_many([{'_id':'project-page-'+str(i), 'org_id':org['id'],
                         'created_by':user['id'],'created_at':(now-timedelta(days=1)).isoformat(),
                         'name':'Project navigation fixture','status':'active','description':'','owner':'Pagination team'} for i in range(1005)])
@@ -392,6 +399,7 @@ class PersistenceTests(unittest.TestCase):
                     assert client.get('/api/findings').json()['total'] == 0
                     assert client.get('/api/tasks',params={'project_id':project['id']}).status_code==404
                     assert client.get('/api/tasks').json()['total']==0
+                    assert client.get('/api/audit-events',params={'search':'literal .*'}).json()['total']==0
                     assert client.get('/api/analytics/summary').json()['findings'] == 0
                     assert client.get('/api/assets/' + asset['id'] + '/history').status_code == 404
                     assert client.get('/api/assets', params={'project_id': project['id']}).status_code == 404
