@@ -1,10 +1,10 @@
 # VAPT-X engineering roadmap
 
-Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `a078dd3` passed backend (245 tests with Mongo), frontend (98 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `d2172a5` passed backend (259 tests with Mongo), frontend (101 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Completed increments
 
-- Membership project admission across browser/token queries, aggregates, reports/evidence and audit; admin grant editor with version checks. Custom-role/service-identity design boundaries are documented.
+- Membership project admission across browser/token queries, aggregates, reports/evidence and audit; admin grant editor with version checks and optional immutable API-token project caps. Custom-role/service-identity design boundaries are documented.
 - Operator-only dry-run/apply key rewrapping for MFA, webhooks and OIDC, with conditional updates and original timestamp preservation.
 - Runtime validation, request/resource limits, reproducible dependencies, API/frontend containers and CI.
 - Cookie sessions, atomic refresh and password budgets, password changes, encrypted TOTP/recovery, private account history and owner-only account disable/reactivate.

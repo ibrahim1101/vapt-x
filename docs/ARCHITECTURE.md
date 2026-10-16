@@ -18,7 +18,7 @@ Source audit: 2026-10-14 UTC, baseline `a2dcdae`. Runtime validation is tracked 
 | Dormant integration helper | `backend/webhooks.py` | Signing/retry helper; no management API or usable integration workflow found |
 | MongoDB | `compose.local.yml` | Local MongoDB 7, persistent named volume, loopback host port 27018 |
 
-The frontend calls `/api` over HTTP(S). Cookie authentication identifies a user/session; `X-Org-Id` chooses an organization but membership is rechecked server-side. `Ctx.require` checks organization-role permissions; `Repository` forces `org_id` into domain queries. Project-level authorization does not exist separately from organization membership.
+The frontend calls `/api` over HTTP(S). Cookie authentication identifies a user/session; `X-Org-Id` chooses an organization but membership is rechecked server-side. `Ctx.require` checks organization-role permissions. Current membership supplies all/selected project admission, and optional immutable API-token project caps intersect it. `Repository` forces organization scope and an independent project predicate into domain queries; legacy evidence/report blobs require accessible parents. Organization administrators retain all-project membership access. See [project access](PROJECT_ACCESS.md) and [authorization evolution](AUTHORIZATION_EVOLUTION.md).
 
 ## Data model
 
