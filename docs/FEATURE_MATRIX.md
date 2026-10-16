@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `d2172a55c68e31c3de8d320fc62d6112233b0d99`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
+Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `0a78ac3bff83a567009e68984629e94a6cf0a0a7`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
 | Area | Implemented and exercised | Remaining limits |
 |---|---|---|
@@ -21,7 +21,7 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 | Assets | Metadata/criticality/tags, bulk registration receipts, server pagination/search/activity | Owner labels confer no permission; target/scope immutable |
 | Authorization | Exact targets, explicit reference/time window/scanner profiles, scope withdrawal, fresh destination checks, complete authorization register/search/approval-flag filter | No authorization attachment/approval workflow |
 | Assessments | Creation, pagination/search, cancellation/retry/history, coverage-aware retest comparison | Process-local check ownership; restart marks interrupted jobs; no scheduler/durable assessment queue |
-| Scan jobs | Complete server pagination, literal ID/engine search, status/source filters, scoped asset names and independently loaded execution records | Records reflect stored execution; no durable scheduling or automatic polling |
+| Scan jobs | Complete server pagination, literal ID/engine search, status/source filters, scoped asset names, independently loaded execution records and fresh initiating account/session/token checks before queued execution | Records reflect stored execution; no durable scheduling or automatic polling |
 | Checks | Bounded HTTP headers/cookies/TLS/security.txt/DNS and constrained Nmap; managed training target | Non-exploitative and intentionally limited; no exhaustive scanner or production sandbox |
 | Finding imports | Nmap, Nuclei, Semgrep, Trivy, ZAP, Gitleaks and Checkov with synthetic fixtures | Import assertions remain unverified; not every upstream schema is supported |
 | API/SBOM inventory | OpenAPI and CycloneDX/SPDX JSON import, deduplication and asset inventory view | Inventory only; no endpoint execution, external references or dependency completeness guarantee |
@@ -42,10 +42,10 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 
 | Check | Result | Run |
 |---|---|---|
-| Backend Python 3.11/3.12 with MongoDB | 259 passed | [38945662027](https://github.com/ibrahim1101/vapt-x/actions/runs/38945662027) |
-| Frontend unit/components and production build | 101 passed, 30 suites; build passed | [38945662160](https://github.com/ibrahim1101/vapt-x/actions/runs/38945662160) |
-| Docker smoke | Passed | [38945662024](https://github.com/ibrahim1101/vapt-x/actions/runs/38945662024) |
-| Chromium against Nginx/Compose | Passed | [38945662072](https://github.com/ibrahim1101/vapt-x/actions/runs/38945662072) |
+| Backend Python 3.11/3.12 with MongoDB | 263 passed | [38959015377](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015377) |
+| Frontend unit/components and production build | 101 passed, 30 suites; build passed | [38959015379](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015379) |
+| Docker smoke | Passed | [38959015374](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015374) |
+| Chromium against Nginx/Compose | Passed | [38959015397](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015397) |
 
 Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
 

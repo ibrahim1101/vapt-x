@@ -1,6 +1,6 @@
 # VAPT-X architecture
 
-Source audit: 2026-10-14 UTC, baseline `a2dcdae`. Runtime validation is tracked separately in [TESTING.md](TESTING.md).
+Updated 2026-10-16 UTC for the current implementation. Runtime acceptance and limits are tracked in [FEATURE_MATRIX.md](FEATURE_MATRIX.md), [TESTING.md](TESTING.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Components and boundaries
 
@@ -9,13 +9,13 @@ Source audit: 2026-10-14 UTC, baseline `a2dcdae`. Runtime validation is tracked 
 | React workspace | `frontend/src/App.js`, `components/` | Authentication/onboarding, organization selection, project filters, assessments, findings, evidence, remediation, reports, AI and audit views |
 | Browser API client | `frontend/src/lib/api.js` | Axios credentials, CSRF and organization headers, single-flight refresh, evidence chunks and downloads |
 | FastAPI entrypoint | `backend/server.py` | Lifespan, middleware, CORS, health, owned training routes and router registration |
-| Identity and authorization | `backend/auth.py`, `core.py` | Users, sessions, organization membership, role permissions, audit events |
-| Tenant repository | `backend/repository.py` | Organization-injected reads/writes and protected identity fields |
+| Identity and authorization | `backend/auth.py`, `core.py` | Users, sessions, MFA, organization membership, role permissions, project admission and audit events |
+| Tenant repository | `backend/repository.py` | Organization/project-scoped reads and writes, legacy blob parent admission and protected identity fields |
 | Domain workflow | `backend/workflow.py` | Projects, scopes, assets, assessments, jobs, imports, triage, tasks and retest comparisons |
 | Scanner adapters | `backend/scanners.py`, `importers.py` | Exact-host/time-window validation, pinned safe requests, constrained Nmap, report normalization |
-| Evidence and reports | `backend/evidence.py`, `reporting.py` | MongoDB-backed chunks, checksums and point-in-time PDF bytes |
-| Optional AI | `backend/analyst.py` | Claude interpretations of at most 30 stored findings and recent conversation history |
-| Dormant integration helper | `backend/webhooks.py` | Signing/retry helper; no management API or usable integration workflow found |
+| Evidence and reports | `backend/evidence.py`, `reporting.py` | MongoDB-backed chunks, checksums, threaded PDF generation and versioned source snapshots |
+| Optional AI | `backend/analyst.py` | Opt-in multi-provider interpretations of at most 30 stored findings, redacted context, usage and bounded conversation history |
+| Optional webhooks | `backend/webhooks.py` | Encrypted configuration, bounded pinned HTTPS/HMAC delivery, durable leased outbox, retries and delivery history |
 | MongoDB | `compose.local.yml` | Local MongoDB 7, persistent named volume, loopback host port 27018 |
 
 The frontend calls `/api` over HTTP(S). Cookie authentication identifies a user/session; `X-Org-Id` chooses an organization but membership is rechecked server-side. `Ctx.require` checks organization-role permissions. Current membership supplies all/selected project admission, and optional immutable API-token project caps intersect it. `Repository` forces organization scope and an independent project predicate into domain queries; legacy evidence/report blobs require accessible parents. Organization administrators retain all-project membership access. See [project access](PROJECT_ACCESS.md) and [authorization evolution](AUTHORIZATION_EVOLUTION.md).
@@ -36,14 +36,14 @@ MongoDB stores evidence as base64 chunks (192 KiB raw each, 10 MiB/file) and rep
 
 ## Execution model and limits
 
-FastAPI BackgroundTasks execute scans in the API process. A process-local lock checks a per-organization maximum of two queued/running jobs. Startup marks unfinished jobs interrupted. There is no durable queue, scheduler, cancellation endpoint or distributed worker lease; use a single API worker until these are implemented and tested. A second worker starting could interrupt another worker's jobs.
+FastAPI BackgroundTasks execute scans in the API process. A process-local lock checks a per-organization maximum of two queued/running jobs. Startup marks unfinished jobs interrupted. Assessment cancellation stops managed tasks/subprocesses and serializes result persistence against cancellation; retries create a separate draft. Before queued execution, fresh account/session/token checks precede membership/project/role and scope checks. There is no durable assessment queue, scheduler or distributed worker lease; use a single API worker until these are implemented and tested. A second worker starting could interrupt another worker's jobs.
 
 Safe checks pin a validated public IP, set the original Host/SNI, disable redirects and environment proxies, and cap a response at 1 MiB. Nmap uses argument-list subprocess execution with fixed TCP-connect ports and a 60-second process deadline. No exploit scripts or credential attacks are supported.
 
-Repository list calls default to 1,000 rows. This is a correctness limitation for dashboard counts, PDFs and retest comparisons; pagination and complete aggregation are required before scale claims. Report generation is synchronous and may block the event loop. Multi-document workflow writes are not transactions; partial-failure recovery remains to be designed.
+Dedicated registers use complete matching server queries with 25-row pages and a maximum offset of 1,000,000. Overview counts use aggregates; workspace previews and selection menus remain bounded. Complete-set report/retest operations enforce explicit row/size limits instead of silently truncating. PDF rendering runs in a worker thread. Multi-document workflow writes are not transactions; partial-failure recovery remains incomplete.
 
 ## Development and production
 
-The supplied MongoDB Compose service and optional non-root API profile are local development infrastructure, not a production deployment. `backend/Dockerfile` uses a single worker and excludes Nmap; the profile has not been built in this environment. Host port 27018 maps to container port 27017. Never assume a cloud workspace can reach the founder's localhost. Use isolated test databases and the application-owned training target.
+The supplied MongoDB Compose service and optional non-root API profile are local development infrastructure, not a production deployment. `backend/Dockerfile` uses a single worker and excludes Nmap; the API/Nginx/Compose profiles are exercised by CI smoke and Chromium workflows. Host port 27018 maps to container port 27017. Never assume a cloud workspace can reach the founder's localhost. Use isolated test databases and the application-owned training target.
 
-Production needs authenticated/private MongoDB, TLS termination, validated configuration, controlled registration/bootstrap, bounded workers, backups with tested restore, secrets management and monitoring. Optional AI requires a separate SDK and API key; core assessment workflows must work without AI.
+Production needs authenticated/private MongoDB, TLS termination, validated configuration, controlled registration/bootstrap, bounded workers, backups with tested restore, secrets management and monitoring. Optional AI requires explicit provider configuration and, where applicable, SDK dependencies and credentials; core assessment workflows work without AI.

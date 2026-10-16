@@ -283,3 +283,13 @@ Final code `d2172a55c68e31c3de8d320fc62d6112233b0d99` passed backend 38945662027
 Queued scans now revalidate initiating account status/credential epoch and the session or API token at the execution boundary, before scope resolution or network activity. Token action and project caps are loaded again from the live record. Invalid credentials fail the queued job through existing failure/audit handling. This does not introduce durable scheduling or cancel running checks. Focused negative tests and the existing lifecycle/project suites cover the boundary; verification results follow below.
 
 Local validation: `/tmp/vaptx-venv/bin/python -m pytest tests -q` from `backend`: **250 passed, 12 Mongo-dependent skipped, 154 subtests passed**. `git diff --check` passed. CI database, container and browser acceptance remains pending for this increment.
+
+Final acceptance at code `0a78ac3bff83a567009e68984629e94a6cf0a0a7`:
+
+- Backend Python 3.11/3.12 with disposable Mongo: **263 passed** on both versions — [38959015377](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015377). The new database test exercises 13 synthetic account/session/token cases, including valid controls, live action/project caps and token membership changes.
+- Frontend: **101 tests, 30 suites and production build passed** — [38959015379](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015379).
+- Docker smoke passed — [38959015374](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015374).
+- Real Nginx/Compose Chromium integration passed — [38959015397](https://github.com/ibrahim1101/vapt-x/actions/runs/38959015397).
+- Local full suite after adding the persistence test: **250 passed, 13 Mongo-dependent skipped, 154 subtests passed**; dependency consistency and whitespace checks passed.
+
+Updated the architecture to remove outdated baseline claims about unavailable cancellation/webhook workflows, synchronous PDF rendering and missing aggregate/register work. All acceptance used synthetic data. No live external execution, merge, release or production deployment occurred. Custom roles/service identities, durable assessment ownership and the remaining operational roadmap are still incomplete.
