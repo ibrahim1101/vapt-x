@@ -1,7 +1,9 @@
 import os
 import secrets
 import logging
-from datetime import timedelta
+import hashlib
+import math
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from pymongo.errors import DuplicateKeyError
@@ -80,7 +82,7 @@ async def security_events(offset:int=Query(default=0,ge=0,le=1_000_000),
 async def seed_admin():
     await db.users.create_index("email", unique=True)
     await db.memberships.create_index([("org_id", 1), ("user_id", 1)], unique=True)
-    await db.auth_attempts.create_index("expires_at", expireAfterSeconds=0)
+    await db.auth_rate_limits.create_index("expires_at", expireAfterSeconds=0)
     await db.mfa_attempts.create_index("expires_at", expireAfterSeconds=0)
     await db.account_events.create_index([("user_id",1),("created_at",-1),("_id",-1)])
     email = os.environ["ADMIN_EMAIL"].lower().strip()
@@ -124,23 +126,39 @@ async def register(body: Credentials, response: Response):
 @router.post("/auth/login")
 async def login(body: Credentials, response: Response):
     email = str(body.email).lower()
-    count = await db.auth_attempts.count_documents({"email": email, "expires_at": {"$gt": now()}})
-    if count >= 10:
-        raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
+    await charge_auth_attempt("login", email)
     doc = await db.users.find_one({"email": email})
     if not doc or not verify_password(body.password, doc["password_hash"]):
-        await insert_identity("auth_attempts", {"email": email, "expires_at": now() + timedelta(minutes=15)})
         raise HTTPException(401, "Invalid email or password")
     if doc.get("mfa_enabled"):
         from mfa import consume
         verified = await consume(doc, body.mfa_code)
         if not verified:
-            await insert_identity("auth_attempts", {"email": email, "expires_at": now() + timedelta(minutes=15)})
             raise HTTPException(401, "A valid, unused authenticator or recovery code is required")
         doc = verified
         await db.mfa_attempts.delete_one({"_id":str(doc["_id"])})
-    await db.auth_attempts.delete_many({"email": email})
     return await establish_session(clean(doc), response)
+
+
+async def charge_auth_attempt(action, subject):
+    """Reserve one password check atomically; successes do not reset the budget."""
+    instant = now()
+    window = int(instant.timestamp()) // 900
+    expires = datetime.fromtimestamp((window + 1) * 900, tz=timezone.utc)
+    identity = hashlib.sha256(subject.encode()).hexdigest()
+    query = {"_id": f"{action}:{identity}:{window}"}
+    update = {"$inc": {"count": 1}, "$setOnInsert": {"expires_at": expires}}
+    try:
+        attempt = await db.auth_rate_limits.find_one_and_update(
+            query, update, upsert=True, return_document=ReturnDocument.AFTER)
+    except DuplicateKeyError:
+        # A concurrent first request may win insertion of this unique bucket.
+        attempt = await db.auth_rate_limits.find_one_and_update(
+            query, {"$inc": {"count": 1}}, return_document=ReturnDocument.AFTER)
+    if not attempt or attempt["count"] > 10:
+        retry_after = max(1, math.ceil((expires - instant).total_seconds()))
+        raise HTTPException(429, "Too many attempts. Try again after the current 15-minute window.",
+                            headers={"Retry-After": str(retry_after)})
 
 
 @router.get("/auth/me")
@@ -194,10 +212,7 @@ async def change_password(body: PasswordChange, response: Response, user=Depends
     if not credential or credential.get("credential_version", 0) != user.get("credential_version", 0):
         raise HTTPException(401, "Credentials changed. Sign in again.")
     # Independent throttle: a stolen session must not allow unlimited password guesses.
-    key = "password-change:" + user["id"]
-    if await db.auth_attempts.count_documents({"email": key, "expires_at": {"$gt": now()}}) >= 10:
-        raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
-    await insert_identity("auth_attempts", {"email": key, "expires_at": now() + timedelta(minutes=15)})
+    await charge_auth_attempt("password-change", user["id"])
     if not verify_password(body.current_password, credential["password_hash"]):
         raise HTTPException(403, "Current password is incorrect")
     if verify_password(body.new_password, credential["password_hash"]):
@@ -214,7 +229,6 @@ async def change_password(body: PasswordChange, response: Response, user=Depends
          "$inc": {"credential_version": 1}}, return_document=ReturnDocument.AFTER)
     if not changed:
         raise HTTPException(409, "Credentials changed. Sign in again.")
-    await db.auth_attempts.delete_many({"email": key})
     await renew_credentials(changed, response)
     await account_event(user["id"], "password.changed")
     return {"ok": True, "notice": "Password changed. Previous sessions and API tokens are invalidated."}

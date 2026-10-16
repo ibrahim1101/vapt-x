@@ -11,8 +11,7 @@ class PasswordTests(unittest.IsolatedAsyncioTestCase):
         user={'id':'alice','credential_version':2}
         with patch.object(auth,'db') as db, patch.object(auth,'verify_password',side_effect=[True,False]), patch.object(auth,'hash_password',return_value='new-hash'), patch.object(auth,'insert_identity',AsyncMock()), patch.object(auth,'establish_session',AsyncMock()) as establish:
             db.users.find_one=AsyncMock(return_value={'_id':'alice','password_hash':'old-hash','credential_version':2})
-            db.auth_attempts.count_documents=AsyncMock(return_value=0)
-            db.auth_attempts.delete_many=AsyncMock()
+            db.auth_rate_limits.find_one_and_update=AsyncMock(return_value={'count':1})
             db.users.find_one_and_update=AsyncMock(return_value={'_id':'alice','password_hash':'new-hash','credential_version':3})
             db.sessions.update_many=AsyncMock();db.api_tokens.update_many=AsyncMock()
             result=await auth.change_password(auth.PasswordChange(current_password='old-password',new_password='new-password'),Response(),user)
@@ -26,7 +25,7 @@ class PasswordTests(unittest.IsolatedAsyncioTestCase):
         for count,status in [(0,403),(10,429)]:
             with patch.object(auth,'db') as db,patch.object(auth,'verify_password',return_value=False),patch.object(auth,'insert_identity',AsyncMock()):
                 db.users.find_one=AsyncMock(return_value={'_id':'alice','password_hash':'old'})
-                db.auth_attempts.count_documents=AsyncMock(return_value=count)
+                db.auth_rate_limits.find_one_and_update=AsyncMock(return_value={'count':count+1})
                 with self.assertRaises(HTTPException) as error:
                     await auth.change_password(auth.PasswordChange(current_password='wrong-password',new_password='new-password'),Response(),{'id':'alice','password_hash':'old'})
                 self.assertEqual(error.exception.status_code,status);db.users.find_one_and_update.assert_not_called()

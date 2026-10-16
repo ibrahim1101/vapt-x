@@ -61,7 +61,7 @@ class MFATests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(error.exception.status_code,409);db.users.find_one_and_update.assert_not_called()
     async def test_login_without_valid_second_factor_never_establishes_session(self):
         with patch.object(auth,'db') as db,patch.object(auth,'verify_password',return_value=True),patch.object(auth,'insert_identity',AsyncMock()),patch.object(auth,'establish_session',AsyncMock()) as establish,patch.object(mfa,'consume',AsyncMock(return_value=None)):
-            db.auth_attempts.count_documents=AsyncMock(return_value=0);db.users.find_one=AsyncMock(return_value=self.document)
+            db.auth_rate_limits.find_one_and_update=AsyncMock(return_value={'count':1});db.users.find_one=AsyncMock(return_value=self.document)
             with self.assertRaises(HTTPException) as error:await auth.login(auth.Credentials(email='alice@example.com',password='valid-password'),Response())
             self.assertEqual(error.exception.status_code,401);establish.assert_not_awaited()
     async def test_api_tokens_cannot_start_enrollment_or_confirm(self):
