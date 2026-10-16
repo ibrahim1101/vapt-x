@@ -46,7 +46,7 @@ api.interceptors.response.use(response => {
     original._retried = true;
     // A parallel read may be rejected after the old session is revoked but before
     // the rotation response installs new cookies. Wait before attempting refresh.
-    await Promise.all([...credentialChanges].map(change => change.promise));
+    if (credentialChanges.size) await Promise.all([...credentialChanges].map(change => change.promise));
     if (original._credentialGeneration !== undefined && original._credentialGeneration !== credentialGeneration) {
       return api(original);
     }
@@ -55,7 +55,7 @@ api.interceptors.response.use(response => {
       await refreshing;
       return api(original);
     } catch {
-      await Promise.all([...credentialChanges].map(change => change.promise));
+      if (credentialChanges.size) await Promise.all([...credentialChanges].map(change => change.promise));
       if (original._credentialGeneration !== undefined && original._credentialGeneration !== credentialGeneration) return api(original);
       window.dispatchEvent(new Event('vaptx-session-expired'));
     }
