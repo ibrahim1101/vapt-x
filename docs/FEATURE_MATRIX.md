@@ -45,3 +45,9 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
 
 Evidence, report, authorization, membership, scan-job, remediation and audit registers now query complete matching collections, with live 25-row pages. Pagination offsets remain capped at 1,000,000. Selection menus and workspace previews remain bounded; dedicated registers query complete server collections.
+
+## Isolated operations increment
+
+| Feature name | Category | Priority | Implementation status | Test status | Known limitations | Relevant source files | Related pull request |
+|---|---|---|---|---|---|---|---|
+| Disposable MongoDB backup/restore/key-recovery drill | Operations | P1 | In progress | Local guard regressions passed; real CI restore pending | Synthetic isolated server only; no production/PITR/replica-set recovery claim | `scripts/verify_restore.py`, `.github/workflows/restore.yml`, `docs/BACKUP_RESTORE.md` | Pending separate operations PR |

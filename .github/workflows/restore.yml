@@ -1,0 +1,53 @@
+name: Disposable restore drill
+
+on:
+  push:
+    paths:
+      - "scripts/verify_restore.py"
+      - "scripts/test_verify_restore.py"
+      - "backend/requirements*.txt"
+      - ".github/workflows/restore.yml"
+  pull_request:
+    paths:
+      - "scripts/verify_restore.py"
+      - "scripts/test_verify_restore.py"
+      - "backend/requirements*.txt"
+      - ".github/workflows/restore.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      RESTORE_TEST_URI: mongodb://127.0.0.1:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
+      - run: python -m pip check
+      - name: Guard regression tests
+        run: python -m unittest discover -s scripts -p test_verify_restore.py
+      - name: Dump, remap, restore and verify synthetic data and key recovery
+        env:
+          RESTORE_TEST_CONTAINER: ${{ job.services.mongodb.id }}
+        run: python scripts/verify_restore.py
+      # No archive, key, log dump or database artifact is uploaded.
+      # GitHub destroys this disposable service container even when the drill fails.
