@@ -376,7 +376,7 @@ class PersistenceTests(unittest.TestCase):
                         'logs':['Historical execution fixture'],'raw_output':'PRIVATE_RAW_FIXTURE','checks':[]} for i in range(1005)])
                     jobs_page=client.get('/api/jobs',params={'project_id':project['id'],'search':'job-page-','source':'import','status':'completed','offset':1000}).json()
                     assert jobs_page['total']==1005 and len(jobs_page['items'])==5 and not jobs_page['has_more'],jobs_page
-                    assert all(row['asset_name']==asset['name'] and 'raw_output' not in row and 'logs' not in row for row in jobs_page['items'])
+                    assert all(row['asset_name']=='Updated asset' and 'raw_output' not in row and 'logs' not in row for row in jobs_page['items'])
                     assert client.get('/api/jobs/job-page-0').json()['logs']==['Historical execution fixture']
                     assert client.get('/api/jobs',params={'source':'invalid'}).status_code==422
                     mongo[database].projects.insert_many([{'_id':'project-page-'+str(i), 'org_id':org['id'],

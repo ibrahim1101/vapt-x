@@ -438,5 +438,13 @@ test('controlled assessment, evidence, reporting and session lifecycle', async (
   await expect(page.getByTestId('audit-event-details')).toContainText('Synthetic CI workflow complete');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('workspace-modal')).toBeHidden();
+  await page.getByTestId('nav-scans').click();
+  await page.getByTestId('field-job-source').selectOption('import');
+  await expect(page.getByTestId('jobs-total')).not.toContainText('0 matching jobs');
+  await page.getByTestId(/^job-details-/).first().click();
+  await expect(page.getByTestId('scan-console')).toContainText('Imported scanner-authored output');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('field-job-search').fill('no-such-synthetic-job');
+  await expect(page.getByTestId('jobs-total')).toContainText('0 matching jobs');
   expect(pageErrors).toEqual([]);
 });
