@@ -17,7 +17,7 @@ def membership_projects(membership):
 
 def metadata(membership):
     ids=membership_projects(membership)
-    return {'mode':'all' if ids is None else 'selected','project_ids':[] if ids is None else ids}
+    return {'mode':'all' if ids is None else 'selected','project_ids':[] if ids is None else ids,'version':membership.get('project_access_version',0)}
 
 def require_all_projects(ctx):
     if ctx.project_ids is not None:raise HTTPException(403,'Organization-wide access is required for this operation')

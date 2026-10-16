@@ -342,7 +342,7 @@ async def member_directory(search: str = Query(default='',max_length=120),
     pipeline.append({'$facet':{
         'count':[{'$count':'total'}],
         'items':[{'$sort':{'account.email':1,'_id':1}},{'$skip':offset},{'$limit':limit},
-                 {'$project':{'_id':0,'id':'$user_id','name':'$account.name','email':'$account.email','role':1,'project_access':1}}],
+                 {'$project':{'_id':0,'id':'$user_id','name':'$account.name','email':'$account.email','role':1,'project_access':1,'project_access_version':1}}],
     }})
     rows = await db.memberships.aggregate(pipeline).to_list(1)
     result = rows[0] if rows else {'count':[],'items':[]}
@@ -350,6 +350,7 @@ async def member_directory(search: str = Query(default='',max_length=120),
     for member in result['items']:
         if ctx.role=='org_admin' or member['id']==ctx.uid:member['project_access']=project_access_metadata(member)
         else:member.pop('project_access',None)
+        member.pop('project_access_version',None)
     return {'items':result['items'],'total':total,'offset':offset,'limit':limit,
             'has_more':offset+len(result['items'])<total}
 
@@ -373,7 +374,7 @@ async def grant_member(body: MemberInput, ctx=Depends(get_ctx)):
         if target and target["role"]=="org_admin" and body.role!="org_admin" and await db.memberships.count_documents({"org_id":ctx.org_id,"role":"org_admin"})<=1:
             raise HTTPException(409,"An organization must retain an administrator")
         await db.memberships.update_one({"org_id":ctx.org_id,"user_id":str(user["_id"])},
-            {"$set":{"role":body.role,**({"project_access":{"mode":"all","project_ids":[]}} if body.role=="org_admin" else {})},"$setOnInsert":{"_id":new_id()}},upsert=True)
+            {"$set":{"role":body.role,**({"project_access":{"mode":"all","project_ids":[]}} if body.role=="org_admin" else {})},"$setOnInsert":{"_id":new_id()},**({"$inc":{"project_access_version":1}} if target and target["role"]!=body.role else {})},upsert=True)
         await audit(ctx,"membership.granted","users",str(user["_id"]),{"role":body.role})
     return {"ok":True}
 

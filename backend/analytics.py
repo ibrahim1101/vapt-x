@@ -36,4 +36,4 @@ async def summary(project_id: str | None = None, ctx=Depends(get_ctx)):
         'critical_high':counts['critical']+counts['high'],
         'active_jobs':jobs.get('queued',0)+jobs.get('running',0), 'completed_jobs':jobs.get('completed',0),
         'by_verification':{str(key or 'unspecified'):value for key,value in verification.items()},
-        'notice':'Counts cover all stored records in this organization/project at query time. Accepted-risk findings remain open. Imports and checks do not establish complete security coverage. Concurrent writes may occur between counts.'}
+        'notice':'Counts cover stored records in projects accessible under your current membership at query time. Accepted-risk findings remain open. Imports and checks do not establish complete security coverage. Concurrent writes may occur between counts.'}

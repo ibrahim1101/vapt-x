@@ -13,12 +13,12 @@ test('selection preserves grants absent from the current server page and saves o
  await act(async()=>root.render(<ProjectAccessEditor member={{id:'member',project_access:{mode:'selected',project_ids:['older-page']}}} onSaved={saved} onClose={close}/>));
  expect(api.post).not.toHaveBeenCalled();await act(async()=>container.querySelector('[data-testid="project-grant-visible"]').click());
  await act(async()=>container.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
- expect(api.post).toHaveBeenCalledWith('/members/member/project-access',{mode:'selected',project_ids:['older-page','visible']});expect(saved).toHaveBeenCalledTimes(1);expect(close).toHaveBeenCalledTimes(1);
+ expect(api.post).toHaveBeenCalledWith('/members/member/project-access',{mode:'selected',project_ids:['older-page','visible'],expected_version:0});expect(saved).toHaveBeenCalledTimes(1);expect(close).toHaveBeenCalledTimes(1);
 });
 test('all-project mode discards selections from its request and errors keep the editor open',async()=>{
  const close=jest.fn();api.post.mockRejectedValue(new Error('Membership changed'));
- await act(async()=>root.render(<ProjectAccessEditor member={{id:'member',project_access:{mode:'selected',project_ids:['old']}}} onSaved={jest.fn()} onClose={close}/>));
+ await act(async()=>root.render(<ProjectAccessEditor member={{id:'member',project_access:{mode:'selected',project_ids:['old'],version:7}}} onSaved={jest.fn()} onClose={close}/>));
  const select=container.querySelector('select');await act(async()=>{select.value='all';select.dispatchEvent(new Event('change',{bubbles:true}));});
  await act(async()=>container.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
- expect(api.post).toHaveBeenCalledWith('/members/member/project-access',{mode:'all',project_ids:[]});expect(container.textContent).toContain('Membership changed');expect(close).not.toHaveBeenCalled();
+ expect(api.post).toHaveBeenCalledWith('/members/member/project-access',{mode:'all',project_ids:[],expected_version:7});expect(container.textContent).toContain('Membership changed');expect(close).not.toHaveBeenCalled();
 });

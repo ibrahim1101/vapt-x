@@ -84,11 +84,11 @@ class ProjectAccessPersistenceTests(unittest.TestCase):
      me=client.get('/api/auth/me').json();assert me['organizations'][0]['project_access']['project_ids']==[projects[0]]
      # Empty selection immediately removes project data from an already-issued token.
      cookies(owner_cookies)
-     assert client.post('/api/members/'+member['id']+'/project-access',headers=headers(),json={'mode':'selected','project_ids':[]}).status_code==200
+     assert client.post('/api/members/'+member['id']+'/project-access',headers=headers(),json={'mode':'selected','project_ids':[],'expected_version':1}).status_code==200
      assert client.get('/api/projects',headers={'authorization':'Bearer '+token}).json()['total']==0
      assert client.get('/api/evidence/allowed-evidence/download',headers={'authorization':'Bearer '+token}).status_code==404
      # Granting all again restores project access without changing role or account.
-     assert client.post('/api/members/'+member['id']+'/project-access',headers=headers(),json={'mode':'all','project_ids':[]}).status_code==200
+     assert client.post('/api/members/'+member['id']+'/project-access',headers=headers(),json={'mode':'all','project_ids':[],'expected_version':2}).status_code==200
      assert client.get('/api/projects',headers={'authorization':'Bearer '+token}).json()['total']==2
      assert db.users.find_one({'_id':member['id']}).get('credential_version',0)==0
    finally:

@@ -72,3 +72,12 @@ class QueuedScanAccessTests(unittest.IsolatedAsyncioTestCase):
    checks.assert_not_awaited()
    update=repository.return_value.update.call_args.args[2]
    self.assertEqual(update['status'],'failed');self.assertIn('Project access was revoked',update['error'])
+
+class GrantVersionTests(unittest.IsolatedAsyncioTestCase):
+ async def test_stale_editor_cannot_overwrite_newer_project_access(self):
+  ctx=Ctx({'id':'admin'},'org','org_admin')
+  with patch.object(project_membership,'db') as db:
+   db.memberships.find_one=AsyncMock(side_effect=[{'_id':'actor','role':'org_admin'},{'_id':'member','role':'viewer','project_access_version':2}])
+   db.users.find_one=AsyncMock(return_value={'_id':'admin'})
+   with self.assertRaises(HTTPException) as error:await project_membership.set_project_access('target',project_membership.ProjectAccessInput(mode='all',expected_version=1),ctx)
+   self.assertEqual(error.exception.status_code,409);db.memberships.update_one.assert_not_called();db.projects.count_documents.assert_not_called()

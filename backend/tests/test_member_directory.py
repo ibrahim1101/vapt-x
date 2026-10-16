@@ -19,3 +19,15 @@ class MemberDirectoryTests(unittest.IsolatedAsyncioTestCase):
             cursor=MagicMock();cursor.to_list=AsyncMock(return_value=[]);db.memberships.aggregate.return_value=cursor
             page=await auth.member_directory('',None,0,25,Ctx({'id':'u'},'tenant','viewer'))
             self.assertEqual(page['items'],[]);self.assertEqual(page['total'],0);self.assertFalse(page['has_more'])
+
+class ProjectPolicyDirectoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_admin_receives_grant_version_and_other_members_do_not_receive_ids(self):
+        for role,user_id,visible in [('org_admin','admin',True),('viewer','target',True),('viewer','other',False)]:
+            with patch.object(auth,'db') as db:
+                row={'id':'target','email':'fixture@example.com','role':'viewer','project_access':{'mode':'selected','project_ids':['private-project']},'project_access_version':7}
+                db.memberships.aggregate.return_value.to_list=AsyncMock(return_value=[{'count':[{'total':1}],'items':[row]}])
+                result=await auth.member_directory('',None,0,25,Ctx({'id':user_id},'tenant',role))
+                item=result['items'][0]
+                self.assertNotIn('project_access_version',item)
+                if visible:self.assertEqual(item['project_access'],{'mode':'selected','project_ids':['private-project'],'version':7})
+                else:self.assertNotIn('project_access',item)

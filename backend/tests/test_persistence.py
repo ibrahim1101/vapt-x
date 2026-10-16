@@ -398,7 +398,8 @@ class PersistenceTests(unittest.TestCase):
                         'org_id':org['id'],'role':'viewer'} for i in range(1005)])
                     directory=client.get('/api/members/directory',params={'search':'Directory literal .*','role':'viewer','offset':1000}).json()
                     assert directory['total']==1005 and len(directory['items'])==5 and not directory['has_more'],directory
-                    assert all(set(item)=={'id','name','email','role'} for item in directory['items'])
+                    assert all(set(item)=={'id','name','email','role','project_access'} for item in directory['items'])
+                    assert all(item['project_access']=={'mode':'all','project_ids':[],'version':0} for item in directory['items'])
                     assert client.get('/api/members/directory',params={'role':'invalid'}).status_code==422
                     mongo[database].projects.insert_many([{'_id':'project-page-'+str(i), 'org_id':org['id'],
                         'created_by':user['id'],'created_at':(now-timedelta(days=1)).isoformat(),
