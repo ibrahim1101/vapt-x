@@ -14,6 +14,7 @@ class RecoveryPersistenceTests(unittest.TestCase):
             from concurrent.futures import ThreadPoolExecutor
             from urllib.parse import urlsplit,parse_qs
             from unittest.mock import patch
+            from cryptography.fernet import Fernet
             from pymongo import MongoClient
             from fastapi.testclient import TestClient
             database='vaptx_recovery_'+uuid.uuid4().hex
@@ -21,6 +22,9 @@ class RecoveryPersistenceTests(unittest.TestCase):
                 ADMIN_EMAIL='owner@example.com',ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
                 INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINARY='nmap',VAPTX_LOCAL_HTTP='1',
                 ACCOUNT_RECOVERY_ENABLED='1',RECOVERY_SMTP_HOST='smtp.synthetic.invalid',RECOVERY_SMTP_FROM='operator@example.com')
+            encryption_key=Fernet.generate_key()
+            os.environ['MFA_ENCRYPTION_KEYS']=encryption_key.decode()
+            mfa_secret=Fernet(encryption_key).encrypt(b'JBSWY3DPEHPK3PXP').decode()
             from server import app
             mongo=MongoClient(os.environ['MONGO_TEST_URL'],serverSelectionTimeoutMS=5000)
             links=[]
@@ -39,7 +43,7 @@ class RecoveryPersistenceTests(unittest.TestCase):
                     stored=mongo[database].account_recovery.find_one({'user_id':user['id']})
                     assert stored['token_hash']==hashlib.sha256(raw.encode()).hexdigest() and raw not in str(stored)
                     codes=['a'*32,'b'*32]
-                    mongo[database].users.update_one({'_id':user['id']},{'$set':{'mfa_enabled':True,'mfa_secret':'synthetic-unavailable-key',
+                    mongo[database].users.update_one({'_id':user['id']},{'$set':{'mfa_enabled':True,'mfa_secret':mfa_secret,
                         'mfa_recovery_hashes':[hashlib.sha256(code.encode()).hexdigest() for code in codes]}})
                     body={'token':raw,'new_password':'synthetic-recovered-password'}
                     assert client.post('/api/auth/recovery/complete',headers=origin,json=body).status_code==403

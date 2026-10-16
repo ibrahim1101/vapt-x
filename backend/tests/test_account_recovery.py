@@ -65,3 +65,12 @@ class AccountRecoveryTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict('os.environ',{},clear=True):self.assertIsNone(recovery.mail_configuration())
         with patch.dict('os.environ',{'ACCOUNT_RECOVERY_ENABLED':'1','RECOVERY_SMTP_HOST':'fixture.example','RECOVERY_SMTP_FROM':'operator@example.com','RECOVERY_SMTP_MODE':'plain'},clear=True):
             with self.assertRaises(ValueError):recovery.mail_configuration()
+
+    def test_smtp_tls_is_verified_before_authentication(self):
+        config={'host':'smtp.synthetic.invalid','port':587,'mode':'starttls','sender':'operator@example.com','username':'fixture','password':'private'}
+        with patch.object(recovery.ssl,'create_default_context') as context,patch.object(recovery.smtplib,'SMTP') as smtp:
+            recovery.send_mail(config,'fixture@example.com','https://frontend.example/#reset_token=synthetic')
+            connection=smtp.return_value.__enter__.return_value
+            connection.starttls.assert_called_once_with(context=context.return_value)
+            self.assertLess([call[0] for call in connection.method_calls].index('starttls'),[call[0] for call in connection.method_calls].index('login'))
+            self.assertEqual(smtp.call_args.kwargs['timeout'],10)

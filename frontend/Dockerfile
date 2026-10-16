@@ -2,7 +2,8 @@ FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --ignore-scripts --non-interactive --registry https://registry.npmjs.org
+COPY scripts/install-locked-deps.sh /tmp/install-locked-deps.sh
+RUN sh /tmp/install-locked-deps.sh
 COPY . .
 # Public browser configuration only; never pass credentials in build arguments.
 ARG REACT_APP_BACKEND_URL=""
