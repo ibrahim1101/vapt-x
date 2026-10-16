@@ -305,3 +305,7 @@ Continued after the cloud/configuration push with an Android static JSON adapter
 ## Structured scanner scoring/package facts continuation
 
 Continued after the MobSF push with syntax-validated CVSS 3.0/3.1/4.0 source facts for Trivy and Nuclei, explicit classification IDs, safe reference URLs and structured installed/fixed package version strings. Added distinct source-facts UI, source metadata in immutable report snapshots, PDF fact labels and additive JSON/CSV export columns. Scores are not recomputed and neither fix applicability nor version ordering is inferred. Parser/report/export/frontend tests and real-Mongo/browser acceptance were extended; CI evidence follows after completion.
+
+## Cross-scanner candidate continuation
+
+Continued after the scoring/package push with a read-only, indexed, paginated candidate endpoint and finding-detail register. Candidates share a normalized CVE and exact stored project/asset with a different scanner; each observation and analyst decision stays independent. Added literal-search/field-minimization tests, real-Mongo pagination with 30 candidates plus tenant/project/asset/scanner/CVE decoys, restricted-project regression and a Chromium source-pair assertion. Full acceptance is pending at this checkpoint.

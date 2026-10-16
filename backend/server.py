@@ -36,6 +36,7 @@ async def lifespan(app):
             await db[collection].create_index([('org_id', 1), ('created_at', -1)])
         await db.audit_events.create_index([('org_id',1),('created_at',-1),('_id',-1)])
         await db.findings.create_index([('org_id', 1), ('project_id', 1), ('created_at', -1), ('_id', -1)])
+        await db.findings.create_index([('org_id',1),('project_id',1),('asset_id',1),('cve_ids',1)])
         await db.webhook_deliveries.create_index([('status',1),('next_attempt_at',1),('lease_expires_at',1),('created_at',1)])
         await db.webhook_deliveries.create_index([('org_id',1),('webhook_id',1),('created_at',-1)])
         await db.oidc_flows.create_index('expires_at',expireAfterSeconds=0)
@@ -168,3 +169,6 @@ app.include_router(oidc_router)
 
 from project_membership import router as project_membership_router
 app.include_router(project_membership_router)
+
+from finding_correlations import router as correlations_router
+app.include_router(correlations_router)

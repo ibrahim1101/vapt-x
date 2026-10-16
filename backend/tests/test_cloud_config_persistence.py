@@ -51,6 +51,23 @@ class CloudConfigPersistenceTests(unittest.TestCase):
      facts=next(row for row in export['findings'] if row.get('scanner_cvss'))
      assert facts['package_info']['installed_version']=='1.0' and facts['scanner_cvss'][0]['version']=='3.1',facts
      assert any(row.get('import_metadata',{}).get('format')=='mobsf-android-json' for row in export['findings'] if row.get('import_metadata'))
+     source=next(row for row in rows if row.get('scanner_cvss'))
+     common={'org_id':org['id'],'project_id':project['id'],'asset_id':asset['id'],'assessment_id':assessment['id'],
+      'created_by':user['id'],'created_at':now.isoformat(),'title':'Synthetic correlated observation','severity':'low','status':'open',
+      'verification':'imported-unverified','source':'import','scanner':'semgrep','target':'fixture','cve_ids':['CVE-2099-0001'],'description':'private-correlated-detail'}
+     candidates=[{**common,'_id':'candidate-'+str(i)} for i in range(30)]
+     decoys=[{**common,'_id':'foreign-org','org_id':'foreign'}, {**common,'_id':'foreign-project','project_id':'foreign'},
+      {**common,'_id':'foreign-asset','asset_id':'foreign'},{**common,'_id':'same-scanner','scanner':'trivy'},
+      {**common,'_id':'unrelated-cve','cve_ids':['CVE-2099-9999']}]
+     db.findings.insert_many(candidates+decoys)
+     correlation_path='/api/findings/'+source['_id']+'/correlations'
+     first=client.get(correlation_path).json();assert first['total']==30 and len(first['items'])==25 and first['has_more'],first
+     second=client.get(correlation_path,params={'offset':25}).json();assert len(second['items'])==5 and not second['has_more'],second
+     assert set(r['id'] for r in first['items']).isdisjoint(r['id'] for r in second['items'])
+     assert all(r['common_cve_ids']==['CVE-2099-0001'] for r in first['items'])
+     assert 'private-correlated-detail' not in json.dumps(first)
+     assert client.get(correlation_path,params={'search':'.*'}).json()['total']==0
+     assert client.get(correlation_path,headers={'x-org-id':'foreign'}).status_code==404
      before=db.jobs.count_documents({})
      body={'assessment_id':assessment['id'],'asset_id':asset['id'],'scanner':'prowler','content':'[{}]'}
      response=client.post('/api/imports',headers=headers(),json=body);assert response.status_code==422,response.text
@@ -62,6 +79,7 @@ class CloudConfigPersistenceTests(unittest.TestCase):
      assert client.post('/api/imports',headers=headers(),json=body).status_code==403
      db.memberships.update_one(member,{'$set':{'role':'analyst','project_access':{'mode':'selected','project_ids':[]}}})
      assert client.post('/api/imports',headers=headers(),json=body).status_code==404
+     assert client.get(correlation_path).status_code==404
      db.memberships.update_one(member,{'$set':{'role':'org_admin'}})
      db.scopes.update_one({'_id':scope['id']},{'$set':{'allowed_scanners':['trivy']}})
      assert client.post('/api/imports',headers=headers(),json=body).status_code==403
