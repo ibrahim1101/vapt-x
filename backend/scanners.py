@@ -160,6 +160,29 @@ async def store_findings(repo, assessment, asset, job, rows):
     return count
 
 
+async def execution_credentials(ctx):
+    """Recheck the initiating credential before any target resolution or execution."""
+    user = await db.users.find_one({"_id": ctx.uid})
+    epoch = ctx.user.get("credential_version", 0)
+    if not user or user.get("disabled") or user.get("credential_version", 0) != epoch:
+        raise ValueError("Initiator credentials changed before execution")
+    if ctx.user.get("_api_token_id"):
+        token = await db.api_tokens.find_one({"_id": ctx.user["_api_token_id"],
+            "org_id": ctx.org_id, "created_by": ctx.uid, "revoked": False,
+            "expires_at": {"$gt": iso()}, "credential_version": epoch})
+        if not token:
+            raise ValueError("API token revoked or expired before execution")
+        if token.get("membership_id") != ctx.user.get("_token_membership_id"):
+            raise ValueError("API token membership changed before execution")
+        ctx.user = {**ctx.user, "_token_project_ids": token.get("project_ids")}
+        ctx.scopes = token["scopes"]
+    else:
+        session = await db.sessions.find_one({"_id": ctx.user.get("_sid"),
+            "user_id": ctx.uid, "revoked": False, "expires_at": {"$gt": iso()}})
+        if not session or session.get("credential_version", 0) != epoch:
+            raise ValueError("Session revoked or expired before execution")
+
+
 async def run_job(ctx, job_id):
     repo = Repository(ctx)
     key = (ctx.org_id, job_id)
@@ -168,6 +191,7 @@ async def run_job(ctx, job_id):
             job = await repo.get("jobs", job_id)
             if job["status"] != "queued":
                 return
+            await execution_credentials(ctx)
             membership = await db.memberships.find_one({"org_id": ctx.org_id, "user_id": ctx.uid})
             if not membership:
                 raise ValueError("Organization access was revoked")

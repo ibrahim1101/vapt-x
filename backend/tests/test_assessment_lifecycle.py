@@ -35,6 +35,8 @@ class AssessmentLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.store=self.enterContext(patch.object(scanners,'store_findings',new_callable=AsyncMock,return_value=0))
         database=self.enterContext(patch.object(scanners,'db'))
         database.memberships.find_one=AsyncMock(return_value={'role':'analyst'})
+        database.users.find_one=AsyncMock(return_value={'_id':'analyst'})
+        database.sessions.find_one=AsyncMock(return_value={'credential_version':0})
 
     async def cancel(self):
         return await workflow.cancel_assessment('assessment',workflow.ScopeRevocationInput(reason='Synthetic cancellation'),self.ctx)
