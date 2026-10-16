@@ -1,6 +1,6 @@
 # VAPT-X engineering roadmap
 
-Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `752b704` passed backend (178 tests with Mongo), frontend (56 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `a736efa` passed backend (182 tests with Mongo), frontend (59 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Completed increments
 
@@ -11,11 +11,11 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 - Finding filters/pagination, bulk triage/owner/history, comments, organization SLA policy, remediation edits and coverage-aware retests.
 - Scanner/import safety, secret/IaC imports, API/SBOM inventory, cached CVE intelligence and private exports/evidence integrity.
 - Versioned PDF templates/preview/branding/custom sections/source snapshots; optional multi-provider AI with bounded redaction/usage.
-- Complete overview counts and encrypted opt-in signed webhook outbox with retries, rotation/removal and delivery history.
+- Complete overview counts, dedicated complete remediation/audit navigation and encrypted opt-in signed webhook outbox with retries, rotation/removal and delivery history.
 
 ## Next implementation order
 
-1. Finish complete server navigation for remediation tasks, scan jobs, evidence, scope and organization audit records; retain explicit size/coverage limits in report operations and selectors.
+1. Finish complete server navigation for scan jobs, evidence, scope, report and membership registers; retain explicit size/coverage limits in report operations and selectors.
 2. Complete account reset/email verification and invitation lifecycle with explicit delivery configuration; then optional OIDC. Preserve MFA and token invalidation on recovery.
 3. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
 4. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.

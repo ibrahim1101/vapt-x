@@ -2,13 +2,13 @@
 
 Updated 2026-10-16. **Not ready for production release.** Core workflows have repeatable API, container and browser evidence; the full roadmap and operational acceptance are incomplete.
 
-Verified code: `752b7047612f8b225f4db5738a72ecde51a75349`. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for current implementation and CI links, and [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) for historical checkpoints.
+Verified code: `a736efa62c0aacb65a6e3f6c19e6f870352de8b2`. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for current implementation and CI links, and [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) for historical checkpoints.
 
 | Gate | Current evidence | Outstanding work |
 |---|---|---|
-| Reproducible installation/build | Backend pins, frozen Yarn, Python 3.11/3.12, 56 frontend tests and production build | Dependency/secret review and release reproducibility policy |
+| Reproducible installation/build | Backend pins, frozen Yarn, Python 3.11/3.12, 59 frontend tests and production build | Dependency/secret review and release reproducibility policy |
 | Startup/configuration/health/body limits | Unit and Compose startup/smoke checks | Monitored deployment and degraded-service operations |
-| Identity and tenant boundaries | 178 backend tests with Mongo; cookie/origin/CSRF, MFA, disable/reactivate, membership and token tests | Reset/verification, invitations/OIDC and project ACL |
+| Identity and tenant boundaries | 182 backend tests with Mongo; cookie/origin/CSRF, MFA, disable/reactivate, membership and token tests | Reset/verification, invitations/OIDC and project ACL |
 | Core workflow | Chromium against actual non-root Nginx/API/Mongo; synthetic imports/evidence/remediation/PDF/retest | More large datasets, error/accessibility review and upstream schema variants |
 | Scanner safety | Exact scope/window/profile, pinned transport, timeout/cancel regression and training target | Broader sandboxing and durable worker ownership |
 | Reports/evidence | Checksums, ready-state guards, versioned source snapshots, PDF visual review | Complete-set and size limits still apply; retention/quotas/malware controls |
@@ -20,3 +20,5 @@ Verified code: `752b7047612f8b225f4db5738a72ecde51a75349`. See [FEATURE_MATRIX.m
 Account disable and membership removal block subsequent authenticated operations; requests and organization jobs already in progress may finish. Archive is project metadata and does not revoke scope. Accepted risk remains open in overview counts. Imported assertions and AI interpretation are not verified findings; absence on retest is not proof of resolution.
 
 No production deployment, merge or release has been performed. Use synthetic data for demonstrations and retain the supported single-worker topology. Readiness requires evidence for the remaining operational gates, not merely a successful build.
+
+Latest code acceptance includes complete task/audit navigation beyond 1,000 records, UTC overdue/date behavior, event detail inspection and explicit two-organization browser audit isolation. All four workflows passed for `a736efa`; published CI links are in the feature matrix.

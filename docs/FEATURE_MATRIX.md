@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `752b7047612f8b225f4db5738a72ecde51a75349`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
+Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `a736efa62c0aacb65a6e3f6c19e6f870352de8b2`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
 | Area | Implemented and exercised | Remaining limits |
 |---|---|---|
@@ -21,13 +21,13 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 | API/SBOM inventory | OpenAPI and CycloneDX/SPDX JSON import, deduplication and asset inventory view | Inventory only; no endpoint execution, external references or dependency completeness guarantee |
 | Findings | Normalization, scanner fingerprints, server filters/search/pagination, atomic triage history, bulk triage/owner and comments | Cross-scanner correlation and advanced CVSS/version workflows remain |
 | Intelligence | Cached FIRST EPSS/CISA KEV/NVD/direct OSV CVE facts, offline/stale behavior and attribution | Heuristic prioritization; direct OSV ID misses do not rule out aliases |
-| Remediation | Task creation/edit, assignee/due-date validation, progress/completion and organization SLA policy | Assignees are labels; dedicated complete task navigation is next |
+| Remediation | Task creation/edit, complete stage pagination/search/assignee/UTC-overdue filters, progress/completion and organization SLA policy | Assignees are labels; task completion does not resolve findings |
 | Exports/evidence | Private CSV/JSON export, formula escaping, chunk integrity/completion and download checksum checks | Complete-set operation caps; evidence size limits; no malware scanning or retention policy |
 | Reports | Technical/executive/remediation PDFs, preview, branding/custom sections, versions and integrity-checked source snapshots | Bounded complete sets and output sizes; no public sharing or scheduling |
 | AI | Optional Claude/OpenAI/Gemini/Ollama/compatible interfaces, model allowlists, health, usage and context redaction | No live provider validation; redaction is heuristic; no tool invocation |
 | Overview | Complete server counts and severity chart, query-time coverage disclosures and explicit failure states | Not a security score; counts can change between queries; previews/selectors remain bounded |
 | Webhooks | Encrypted opt-in configuration, pinned HTTPS/HMAC delivery, leased outbox, bounded retries/history, secret rotation and removal | No exactly-once delivery or atomic domain-write/outbox transaction; no live destination activated |
-| Audit | Organization events and account history with explicit attribution/tenant checks | Bounded organization UI; not tamper-proof; account history is best effort |
+| Audit | Complete organization event navigation/filter/detail view and private account history with attribution/tenant checks | Not tamper-proof; account history is best effort |
 | Other integrations | Generic signed webhooks are available | Native ticket/chat/email/SIEM adapters remain |
 | Operations/release | Backend/frontend/Docker/real Nginx Chromium pipelines | Retention, backup/restore, monitored deployment, rollback, broader accessibility and release controls remain |
 
@@ -35,9 +35,11 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 
 | Check | Result | Run |
 |---|---|---|
-| Backend Python 3.11/3.12 with MongoDB | 178 passed | [38880817280](https://github.com/ibrahim1101/vapt-x/actions/runs/38880817280) |
-| Frontend unit/components and production build | 56 passed, 20 suites; build passed | [38880817443](https://github.com/ibrahim1101/vapt-x/actions/runs/38880817443) |
-| Docker smoke | Passed | [38880817344](https://github.com/ibrahim1101/vapt-x/actions/runs/38880817344) |
-| Chromium against Nginx/Compose | Passed | [38880817604](https://github.com/ibrahim1101/vapt-x/actions/runs/38880817604) |
+| Backend Python 3.11/3.12 with MongoDB | 182 passed | [38883645967](https://github.com/ibrahim1101/vapt-x/actions/runs/38883645967) |
+| Frontend unit/components and production build | 59 passed, 22 suites; build passed | [38883645941](https://github.com/ibrahim1101/vapt-x/actions/runs/38883645941) |
+| Docker smoke | Passed | [38883645987](https://github.com/ibrahim1101/vapt-x/actions/runs/38883645987) |
+| Chromium against Nginx/Compose | Passed | [38883645949](https://github.com/ibrahim1101/vapt-x/actions/runs/38883645949) |
 
 Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
+
+Remediation and audit registers now query complete matching collections, with live 25-row pages. Pagination offsets remain capped at 1,000,000. Other selectors/registers can still use bounded workspace previews.
