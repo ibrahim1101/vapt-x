@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {FindingSeverity} from './finding-severity';
 import {api} from '../lib/api';
 jest.mock('../lib/api',()=>({api:{get:jest.fn(),post:jest.fn()},errorText:e=>e.message}));
-jest.mock('./workspace-ui',()=>({Field:({children})=><label>{children}</label>,Select:({children,...props})=><select {...props}>{children}</select>,Submit:({children,busy})=><button disabled={busy}>{children}</button>}));
+jest.mock('./workspace-ui',()=>({Field:({children})=><label>{children}</label>,Select:({children,...props})=><select {...props}>{children}</select>,Action:({children,testId,...props})=><button data-testid={testId} {...props}>{children}</button>}));
 let container,root;
 beforeEach(()=>{global.IS_REACT_ACT_ENVIRONMENT=true;container=document.createElement('div');root=createRoot(container);api.get.mockReset();});
 afterEach(()=>act(()=>root.unmount()));
