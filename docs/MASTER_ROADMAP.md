@@ -1,9 +1,10 @@
 # VAPT-X engineering roadmap
 
-Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `45b95b7` passed backend (239 tests with Mongo), frontend (98 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `a078dd3` passed backend (245 tests with Mongo), frontend (98 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Completed increments
 
+- Operator-only dry-run/apply key rewrapping for MFA, webhooks and OIDC, with conditional updates and original timestamp preservation.
 - Runtime validation, request/resource limits, reproducible dependencies, API/frontend containers and CI.
 - Cookie sessions, atomic refresh and password budgets, password changes, encrypted TOTP/recovery, private account history and owner-only account disable/reactivate.
 - Optional one-use password recovery with TLS mail configuration, MFA preservation, epoch invalidation and browser reset-link handling.
@@ -25,7 +26,7 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 2. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
 3. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.
 4. Add one native ticket/notification integration at a time with credential storage, bounded egress, tenant isolation and explicit activation.
-5. Define retention/quotas, key rewrapping, tamper-proof audit storage and backup/restore drills; implement monitored deployment, rollback and versioned release procedures.
+5. Define retention/quotas, key distribution/retirement policy, tamper-proof audit storage and backup/restore drills; implement monitored deployment, rollback and versioned release procedures.
 6. Broaden large-dataset, responsive/keyboard/error-state acceptance. Desktop packaging follows web stability.
 
 ## Constraints and handoff

@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `45b95b7fa61a833fbad440387cd51d1639df44cf`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
+Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `a078dd3bacfa7528d4e506c378680d18f3c0bfb0`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
 | Area | Implemented and exercised | Remaining limits |
 |---|---|---|
@@ -34,16 +34,17 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 | Webhooks | Encrypted opt-in configuration, pinned HTTPS/HMAC delivery, leased outbox, bounded retries/history, secret rotation and removal | No exactly-once delivery or atomic domain-write/outbox transaction; no live destination activated |
 | Audit | Complete organization event navigation/filter/detail view and private account history with attribution/tenant checks | Not tamper-proof; account history is best effort |
 | Other integrations | Generic signed webhooks are available | Native ticket/chat/email/SIEM adapters remain |
+| Key rotation | Operator-only streaming MFA/webhook/OIDC secret rewrapping; dry-run default, ciphertext compare-and-swap and original timestamp preservation | No automatic schedule, key distribution/escrow or backup/restore acceptance; retain keys for in-flight/old writers |
 | Operations/release | Backend/frontend/Docker/real Nginx Chromium pipelines | Retention, backup/restore, monitored deployment, rollback, broader accessibility and release controls remain |
 
 ## Latest acceptance evidence
 
 | Check | Result | Run |
 |---|---|---|
-| Backend Python 3.11/3.12 with MongoDB | 239 passed | [38930019585](https://github.com/ibrahim1101/vapt-x/actions/runs/38930019585) |
-| Frontend unit/components and production build | 98 passed, 29 suites; build passed | [38930019760](https://github.com/ibrahim1101/vapt-x/actions/runs/38930019760) |
-| Docker smoke | Passed | [38930019555](https://github.com/ibrahim1101/vapt-x/actions/runs/38930019555) |
-| Chromium against Nginx/Compose | Passed | [38930020247](https://github.com/ibrahim1101/vapt-x/actions/runs/38930020247) |
+| Backend Python 3.11/3.12 with MongoDB | 245 passed | [38931136162](https://github.com/ibrahim1101/vapt-x/actions/runs/38931136162) |
+| Frontend unit/components and production build | 98 passed, 29 suites; build passed | [38931136262](https://github.com/ibrahim1101/vapt-x/actions/runs/38931136262) |
+| Docker smoke | Passed | [38931136342](https://github.com/ibrahim1101/vapt-x/actions/runs/38931136342) |
+| Chromium against Nginx/Compose | Passed | [38931136205](https://github.com/ibrahim1101/vapt-x/actions/runs/38931136205) |
 
 Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
 
