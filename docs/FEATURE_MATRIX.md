@@ -1,12 +1,13 @@
 # Implementation status
 
-Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `283f7e46c5028da013ec0a7ce42d7bd8ccb5c882`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
+Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `e8b2024b95ba9308b2df0867ce58325dd532c926`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
 | Area | Implemented and exercised | Remaining limits |
 |---|---|---|
 | Runtime | Validated configuration, bounded request bodies/health, pinned backend dependencies and frozen Yarn installation | Production deployment and upgrade/restore drills remain |
 | Containers | Non-root API and Nginx frontend, fixed API proxy, Compose health/smoke tests | One API worker; local Mongo service is for development |
-| Authentication | Cookie sessions, CSRF/origin controls, atomic refresh rotation, coordinated browser credential changes/retries, password changes and database-enforced attempt budgets | No email verification or password-reset flow |
+| Authentication | Cookie sessions, CSRF/origin controls, atomic refresh rotation, coordinated browser credential changes/retries, password changes and database-enforced attempt budgets | Email verification remains; recovery requires explicit mail configuration |
+| Password recovery | Optional TLS SMTP, hash-only expiring one-use links, credential-epoch binding, MFA preservation and old credential invalidation; private fragment-based form | Disabled by default; no durable mail queue or live delivery acceptance |
 | MFA | Encrypted TOTP enrollment, atomic anti-replay, hash-only one-use recovery codes, replacement/removal, step-up for password changes | Optional operator key; no automatic key rewrapping |
 | Accounts | Private paginated security history; platform-owner search and disable/reactivate with password/MFA | History is best effort; owner accounts protected; in-flight work may finish |
 | Organizations | Switching, fixed roles, membership grants/removal, fresh actor and anti-orphan guards, complete member directory/search/role filters | Registered accounts only; invitations/OIDC/custom roles remain |
@@ -36,10 +37,10 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 
 | Check | Result | Run |
 |---|---|---|
-| Backend Python 3.11/3.12 with MongoDB | 189 passed | [38891351963](https://github.com/ibrahim1101/vapt-x/actions/runs/38891351963) |
-| Frontend unit/components and production build | 65 passed, 24 suites; build passed | [38891351892](https://github.com/ibrahim1101/vapt-x/actions/runs/38891351892) |
-| Docker smoke | Passed | [38891351914](https://github.com/ibrahim1101/vapt-x/actions/runs/38891351914) |
-| Chromium against Nginx/Compose | Passed | [38891351931](https://github.com/ibrahim1101/vapt-x/actions/runs/38891351931) |
+| Backend Python 3.11/3.12 with MongoDB | 200 passed | [38893793164](https://github.com/ibrahim1101/vapt-x/actions/runs/38893793164) |
+| Frontend unit/components and production build | 68 passed, 25 suites; build passed | [38893793168](https://github.com/ibrahim1101/vapt-x/actions/runs/38893793168) |
+| Docker smoke | Passed | [38893793153](https://github.com/ibrahim1101/vapt-x/actions/runs/38893793153) |
+| Chromium against Nginx/Compose | Passed | [38893793163](https://github.com/ibrahim1101/vapt-x/actions/runs/38893793163) |
 
 Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
 
