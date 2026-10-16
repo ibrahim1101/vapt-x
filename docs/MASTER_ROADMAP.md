@@ -1,12 +1,13 @@
 # VAPT-X engineering roadmap
 
-Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `e8b2024` passed backend (200 tests with Mongo), frontend (68 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `2a4f6d2` passed backend (219 tests with Mongo), frontend (84 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Completed increments
 
 - Runtime validation, request/resource limits, reproducible dependencies, API/frontend containers and CI.
 - Cookie sessions, atomic refresh and password budgets, password changes, encrypted TOTP/recovery, private account history and owner-only account disable/reactivate.
 - Optional one-use password recovery with TLS mail configuration, MFA preservation, epoch invalidation and browser reset-link handling.
+- Optional registered-email proof and seven-day email-bound invitation lifecycle with explicit preview/acceptance, issuer authority checks and role preservation.
 - Organization role/membership lifecycle, anti-orphan guards, scoped hash-only tokens and membership-lifetime invalidation.
 - Project edits/archive/templates/navigation; asset metadata/bulk registration/navigation/history; assessment cancellation/retry/history/navigation.
 - Finding filters/pagination, bulk triage/owner/history, comments, organization SLA policy, remediation edits and coverage-aware retests.
@@ -18,7 +19,7 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 
 ## Next implementation order
 
-1. Complete email verification and invitation lifecycle with explicit delivery configuration; then optional OIDC. Preserve MFA and token invalidation on recovery.
+1. Add optional OIDC and explicit deployment policy for registration/mandatory verification. Preserve MFA and epoch/token invalidation semantics; optional email proof and invitations are implemented.
 2. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
 3. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
 4. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.

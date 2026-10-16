@@ -1,47 +1,33 @@
 # Security model and outstanding risks
 
-This is an implementation audit, not a security certification. Source inspected 2026-10-14 UTC. Test evidence belongs in [TESTING.md](TESTING.md).
+Updated 2026-10-16. This describes implemented boundaries, not security certification or production approval. Current synthetic acceptance evidence is in [FEATURE_MATRIX.md](FEATURE_MATRIX.md); release gates are in [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
-## Trust boundaries
+Users, imported scanner reports, evidence and AI text are untrusted. Browser-supplied organization/project IDs select resources; membership, role and organization-scoped queries determine authority. Uploaded assertions and AI interpretation do not authorize scanning or establish exploitability.
 
-Users and uploaded reports/evidence are untrusted. Organization identifiers supplied by the browser are selectors, not authority. The server checks membership, role and organization-scoped resource lookup. Scanner output is an observation; imports remain `imported-unverified`; AI is interpretation and never authorizes a scan or changes finding severity.
+| Boundary | Implemented control | Remaining limit |
+|---|---|---|
+| Authentication | bcrypt byte limits, cookie sessions, atomic refresh and attempt budgets, password/credential-epoch changes, account disable/reactivate | Registration policy, mandatory email-verification policy and OIDC remain deployment/identity work |
+| Browser writes | Exact trusted Origin, CSRF cookie/header checks and credentialed single-origin CORS | Production-origin/cookie/deployment acceptance remains |
+| Cookies | HttpOnly access/refresh cookies, SameSite=Lax, Secure by default; explicit loopback-only development HTTP | Supported browser/deployment combinations still require operational acceptance |
+| MFA | Encrypted TOTP, atomic replay checks, hash-only one-use recovery codes and step-up for credential administration | Optional operator key; no automatic key rewrapping |
+| Mail identity flows | Opt-in TLS SMTP; hash-only expiring reset/verification/invitation links, purpose-specific collections and account/address/epoch binding | No durable mail queue, delivery retry guarantee or live provider acceptance |
+| Email proof | Explicit one-use confirmation records a verified registered address; changed address invalidates displayed status | Does not automatically sign in, grant access or enforce a new sign-in policy |
+| Invitations | Administrator issuance/revocation, private recipient preview, signed-in matching email, explicit acceptance and fresh issuer authority | Single-worker coordination; claim, membership and audit writes are not a transaction |
+| Organizations/tokens | Forced organization scope, fixed roles, fresh membership checks, anti-orphan removal and membership-bound API tokens | No project ACL, custom roles or service identities |
+| Scanning | Exact host/time window/scanner permission, fresh pre-execution checks, bounded pinned transport and managed cancellation | Process-local ownership; no durable scheduler, broad sandbox or exhaustive scanner coverage |
+| Imports/inventory | Bounded parsers, supported-format fixtures and secret/code omission in relevant adapters | Uploader-declared asset association; not every upstream schema; inventory is not vulnerability execution |
+| Evidence/reports | Private chunked uploads, signatures, SHA-256 downloads, versioned integrity-checked snapshots and explicit complete-set caps | Retention, quotas, malware handling and abandoned-data cleanup remain |
+| AI | Optional configured providers/models, bounded findings context, heuristic redaction, no tool invocation or raw evidence files | Redaction is not guaranteed; no live provider retention/consent acceptance |
+| Webhooks | Opt-in encrypted secrets, fixed public HTTPS destinations, DNS-pinned Host/SNI transport, HMAC and leased bounded retries | No exactly-once delivery or atomic domain-write/outbox enqueue; no live destination activated |
+| Audit | Organization events and private account history with metadata attribution and tenant checks | Application records are not a tamper-proof external ledger; account history is best effort |
+| Data operations | Non-root containers, optional integration/MFA encryption keys, explicit configuration | Key rewrapping, monitored deployment, backup/restore/rollback drills and release policy remain |
 
-| Boundary | Existing control | Remaining validation or work |
-| --- | --- | --- |
-| User authentication | bcrypt passwords, expiring access/refresh JWTs, DB session revocation | Refresh races/rotation replay tests, session expiry enforcement/cleanup, MFA, reset, verification, account disable |
-| Browser writes | Exact Origin check, CSRF cookie/header comparison, credentialed single-origin CORS | Cross-origin negative tests and production deployment validation |
-| Cookies | HttpOnly access/refresh, SameSite=Lax, Secure by default; explicit loopback HTTP development mode | Test logout deletion, expired session and production config rejection |
-| Tenant isolation | Membership lookup and forced `org_id` repository filters | Every endpoint/download/background job needs regression coverage; project permissions absent |
-| Scanning | Scope reference, exact host, time window, scanner allowlist, membership recheck at execution | Authorization expiry during long execution; cancellation; per-process concurrency limitations |
-| Network access | Public-IP validation, IP-pinned requests, original Host/SNI, no redirects/proxies for safe checks | DNS/IPv6/error-path fixtures and controlled real transport verification |
-| Nmap | Fixed TCP-connect profile, argument list, restricted ports, timeout/kill | Worker sandboxing, bounded stdout/stderr and process cleanup on cancellation |
-| Imports | Payload/model bounds, supported formats, XML DOCTYPE/entity rejection, 2,000 findings cap | Deep/nested or malformed input fixtures, parser CPU bounds, import-to-asset attribution remains uploader-declared |
-| Evidence | Extension allowlist, binary signatures, chunk length, owner-only writes, SHA-256 on download | Completion/write concurrency, quotas, retention, malware handling and abandoned upload cleanup |
-| Reporting | HTML escaping, stored snapshot bytes, organization-scoped download | SHA-256 verification on download, missing PDF handling, complete pagination and large-document limits |
-| AI | Role/owner/project checks, context cap, raw evidence excluded, defensive system instruction | Redaction of secrets in finding text, prompt injection tests, provider retention/consent settings, history limits |
-| Audit | Application writes events; no public mutation route | Authentication events incomplete; no cryptographic integrity/external ledger, retention policy or guaranteed denied-event delivery |
+Roles are `org_admin`, `security_lead`, `analyst`, `auditor` and `viewer`. Organization administrators manage membership and invitations. Read roles can inspect organization audit records under the existing organization-wide read policy. API tokens intersect their explicit scopes with the owner's current role, credential epoch and membership lifetime; they cannot enter account/session/organization-administration routes or mint credentials. Owner labels are metadata, not permissions.
 
-## Authorization semantics
+Scopes authorize exact normalized hosts rather than wildcard/subdomain ranges. Remote private networks are blocked except the explicit managed `training://local` target. Nmap uses a constrained TCP-connect profile; no exploit scripts are enabled. Scope withdrawal blocks new scans/imports and queued pre-execution checks; an already-running check may finish within its timeout. Assessment cancellation is available but ownership/cancellation coordination remains process-local. Archive does not withdraw scope.
 
-Roles are `org_admin`, `security_lead`, `analyst`, `auditor`, `viewer`. Administrators have all permissions. Leads can authorize scope; analysts can write, scan, triage, remediate, report, use AI and manage evidence. Auditors/viewers have read access; current generic read routes also return organization audit records. There are no custom roles, project memberships, API-token authentication routes or service-account workflows despite helper names for tokens.
+Credential changes invalidate previous sessions/API tokens through database-checked epochs, including credentials inserted late by an old request. Disabling an account or removing membership blocks subsequent authenticated operations; requests and jobs already in progress may finish. Rejoining creates a new membership identity, and retained revocation markers prevent old unbound tokens from reviving. Password recovery preserves enabled MFA and never automatically signs in. Email proof and invitation acceptance do not change passwords, disable MFA or independently grant a session.
 
-A scope authorizes an exact normalized host rather than a wildcard/subdomain range. Only HTTP(S) target syntax and ports 80, 443, 8080 and 8443 are accepted. Repository/container asset labels do not create specialized scanning authorization. Local/private destinations are rejected except the application's explicit `training://local` target. Training routes intentionally omit some security headers and contain only non-sensitive fixtures.
+Invitation acceptance rechecks the recipient account and issuing administrator's active membership identity and credential epoch. Existing roles and other-organization memberships are preserved. Interrupted or ambiguous membership writes can require administrator review; consumed links cannot be replayed to overwrite a role. Retain the one-API-worker contract until distributed membership and scan ownership are implemented.
 
-## Known security work before release
-
-1. Verify tenant isolation and authorization on every route, not only repository methods.
-2. Test bounded input handling including malformed Content-Length and streamed request bodies.
-3. Add distributed job ownership/concurrency and cancellation before multi-worker deployment.
-4. Keep the webhook helper inactive: it validates DNS then connects by hostname, leaving rebinding exposure, and defaults to environment proxy trust. Add pinned transport and encrypted secrets before exposing it.
-5. Add account lifecycle and authentication auditing; restrict registration/bootstrap according to deployment policy.
-6. Define database authentication, encryption at rest/in transit, backup access and recovery procedures. Base64 is encoding, not encryption.
-7. Add retention and per-tenant storage quotas for evidence, reports, jobs and conversations.
-8. Resolve report/comparison pagination so incomplete data cannot mislead security decisions.
-
-Do not use real customer evidence in tests or commit `.env` credentials. Active testing is restricted to owned fixtures or explicitly approved targets and windows. No exploit, persistence, stealth, credential-attack or destructive scanner functionality is part of this design.
-
-## Revocation behavior
-
-Organization administrators/security leads can revoke an owned scope with a recorded reason. New scans/imports and queued jobs' pre-execution authorization checks reject revoked scopes. Revocation does not interrupt a check already executing; existing tool/HTTP timeouts bound that work. Active cancellation remains separate unfinished work.
-
-Session management is account-scoped, independent of selected organization. Listing/revocation queries always filter by authenticated user, active state and expiry. Targeted revocation is atomic; revoking all other sessions excludes the current session. Current-session revocation clears cookies. Returned session metadata contains no access/refresh tokens, password material, IP or browser fingerprints.
+Use only disposable identities, owned training fixtures and mocked mail/AI/webhook delivery for default acceptance. Do not commit real secrets or customer evidence. Production readiness requires the outstanding operational gates and broader authorization/error-path review, not merely passing synthetic workflows.

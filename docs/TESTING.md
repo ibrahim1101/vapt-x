@@ -6,7 +6,7 @@ Audit date: 2026-10-14 UTC. Baseline `a2dcdae` had `backend/pytest.ini` and `tes
 
 Record the exact command, commit/environment, outcome and scope for each check in [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md). Distinguish syntax, mocked unit tests, database-backed API tests, browser tests and actual scanner execution. Mark unavailable checks blocked rather than passed. Never mark the whole product verified because a narrow test passes.
 
-The current Work environment has no Docker available; do not claim Compose, MongoDB container or Windows verification. Do not connect to a founder's localhost or use a production database for tests.
+The local Work environment has no Docker/Mongo service. Local Mongo tests are skipped unless a disposable server is supplied. GitHub Actions runs Mongo-backed tests, Compose smoke checks and Chromium against the actual Nginx containers; current successful run links are in FEATURE_MATRIX.md. The Windows walkthrough is documented, not executed here. Do not connect to a founder's localhost or use a production database for tests.
 
 ## Running checks
 
@@ -50,3 +50,10 @@ No live Anthropic calls, third-party scanning or webhook delivery are necessary 
 `backend/tests/test_foundation.py` covers settings, body limits, readiness, password byte limits, repository tenant-filter enforcement and permission checks with isolated mocks. `backend/tests/test_persistence.py` runs an opt-in MongoDB identity/organization/session flow in a subprocess. Set `MONGO_TEST_URL` only to a disposable MongoDB server; the test creates and drops a uniquely named `vaptx_test_*` database. Without that variable the integration test is skipped. `.github/workflows/backend.yml` provisions MongoDB 7 and runs the suite on Python 3.11 and 3.12; workflow presence is not proof of a passing CI run.
 
 Additional regression modules: `test_auth_rotation.py` (atomic refresh/concurrent replay), `test_importers.py` (five synthetic formats and malformed inputs), and `test_scanner_safety.py` (authorization/DNS/pinned HTTP, no external traffic). The disposable Mongo subprocess now covers the core import/evidence/report/retest workflow and a second organization's denied reads/mutations. It intentionally performs no external scans.
+
+
+## Identity mail acceptance
+
+`test_recovery_persistence.py`, `test_verification_persistence.py` and `test_invitation_persistence.py` use disposable databases and mocked SMTP. They cover reset races/MFA/credential invalidation, one-use email proof across account contexts, invitation email matching, fresh issuer authority, role preservation, removal/rejoining, old API-token rejection, revocation, expiry and navigation beyond 1,000 invitation records. Cookie snapshots retain domain/path attributes while switching synthetic accounts. No real email is sent.
+
+Frontend coverage includes explicit confirmation/acceptance, private fragments, account switching before invitation acceptance and disabled-feature controls. Chromium exercises same-document reset/verification/invitation navigation in addition to the complete existing assessment workflow. Live mail delivery and mandatory verification policy remain separate acceptance work.
