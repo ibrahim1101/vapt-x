@@ -1,18 +1,19 @@
 # Implementation status
 
-Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `8bb58f2fcd0524a8961aa75f4c1c55dccfad9b58`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
+Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `45b95b7fa61a833fbad440387cd51d1639df44cf`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
 | Area | Implemented and exercised | Remaining limits |
 |---|---|---|
 | Runtime | Validated configuration, bounded request bodies/health, pinned backend dependencies and frozen Yarn installation | Production deployment and upgrade/restore drills remain |
 | Containers | Non-root API and Nginx frontend, fixed API proxy, Compose health/smoke tests | One API worker; local Mongo service is for development |
-| Authentication | Cookie sessions, CSRF/origin controls, atomic refresh rotation, coordinated browser credential changes/retries, password changes, stored-session expiry, database-enforced attempt budgets and open/invitation-only/closed registration | OIDC remains; mail flows require explicit configuration |
+| Authentication | Cookie sessions, CSRF/origin controls, atomic refresh rotation, coordinated browser credential changes/retries, password changes, stored-session expiry, database-enforced attempt budgets and open/invitation-only/closed registration | Identity/mail integrations require explicit configuration |
+| OIDC | Explicit existing-account link/unlink, fixed provider code flow with PKCE/nonce/signature checks, one-use browser proof, local MFA and epoch invalidation | Disabled by default; no discovery/provisioning/forced SSO/provider logout synchronization or live provider acceptance |
 | Email verification | Optional TLS mail, hash-only 24-hour one-use links, account/address/epoch binding, explicit confirmation, private status and optional required workspace admission | Limited account sessions remain usable; delivery stays opt-in and mocked |
 | Invitations | Optional administrator send/list/revoke, authenticated organization/role preview, matching-email acceptance, seven-day expiry, fresh issuer authority and role preservation | Single-worker lock; non-transactional claim/membership/audit writes; no durable mail queue |
 | Password recovery | Optional TLS SMTP, hash-only expiring one-use links, credential-epoch binding, MFA preservation and old credential invalidation; private fragment-based form | Disabled by default; no durable mail queue or live delivery acceptance |
 | MFA | Encrypted TOTP enrollment, atomic anti-replay, hash-only one-use recovery codes, replacement/removal, step-up for password changes | Optional operator key; no automatic key rewrapping |
 | Accounts | Private paginated security history; platform-owner search and disable/reactivate with password/MFA | History is best effort; owner accounts protected; in-flight work may finish |
-| Organizations | Switching, fixed roles, membership grants/removal, fresh actor and anti-orphan guards, complete member directory/search/role filters and email-bound invitation lifecycle | Invitation acceptance requires the registered matching account; OIDC/custom roles remain |
+| Organizations | Switching, fixed roles, membership grants/removal, fresh actor and anti-orphan guards, complete member directory/search/role filters and email-bound invitation lifecycle | Invitation acceptance requires the registered matching account; Custom roles and project ACL remain |
 | API tokens | One-time display, hash-only storage, expiry/revocation, organization/current-role and membership binding | No service identities or project ACL |
 | Tenant boundaries | Organization-scoped repositories and negative API/browser tests including downloads and jobs | Project-level authorization remains absent |
 | Projects | Metadata, archive/restore, owner labels, templates, complete server pagination/search and related counts | Archive does not withdraw scanning authorization |
@@ -39,10 +40,10 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 
 | Check | Result | Run |
 |---|---|---|
-| Backend Python 3.11/3.12 with MongoDB | 225 passed | [38927206284](https://github.com/ibrahim1101/vapt-x/actions/runs/38927206284) |
-| Frontend unit/components and production build | 90 passed, 28 suites; build passed | [38927206314](https://github.com/ibrahim1101/vapt-x/actions/runs/38927206314) |
-| Docker smoke | Passed | [38927206294](https://github.com/ibrahim1101/vapt-x/actions/runs/38927206294) |
-| Chromium against Nginx/Compose | Passed | [38927206397](https://github.com/ibrahim1101/vapt-x/actions/runs/38927206397) |
+| Backend Python 3.11/3.12 with MongoDB | 239 passed | [38930019585](https://github.com/ibrahim1101/vapt-x/actions/runs/38930019585) |
+| Frontend unit/components and production build | 98 passed, 29 suites; build passed | [38930019760](https://github.com/ibrahim1101/vapt-x/actions/runs/38930019760) |
+| Docker smoke | Passed | [38930019555](https://github.com/ibrahim1101/vapt-x/actions/runs/38930019555) |
+| Chromium against Nginx/Compose | Passed | [38930020247](https://github.com/ibrahim1101/vapt-x/actions/runs/38930020247) |
 
 Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
 

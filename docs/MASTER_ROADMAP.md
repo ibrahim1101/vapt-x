@@ -1,6 +1,6 @@
 # VAPT-X engineering roadmap
 
-Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `8bb58f2` passed backend (225 tests with Mongo), frontend (90 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `45b95b7` passed backend (239 tests with Mongo), frontend (98 tests/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Completed increments
 
@@ -21,17 +21,18 @@ Updated 2026-10-16. The existing React/FastAPI/Mongo/Docker application is retai
 
 ## Next implementation order
 
-1. Broaden synthetic OIDC provider compatibility and operational acceptance. Explicit linking is implemented; discovery, provisioning, forced SSO and provider lifecycle synchronization remain separate work.
-2. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
-3. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
-4. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.
-5. Add one native ticket/notification integration at a time with credential storage, bounded egress, tenant isolation and explicit activation.
-6. Define retention/quotas, key rewrapping, tamper-proof audit storage and backup/restore drills; implement monitored deployment, rollback and versioned release procedures.
-7. Broaden large-dataset, responsive/keyboard/error-state acceptance. Desktop packaging follows web stability.
+1. Introduce project-level permissions, custom-role/service-identity design and comprehensive negative authorization regressions before broadening token access.
+2. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership coordination before enabling multiple API workers.
+3. Expand import schema fixtures, structured CVSS/version handling and cross-scanner correlation; distinguish observations, imported assertions and analyst decisions.
+4. Add one native ticket/notification integration at a time with credential storage, bounded egress, tenant isolation and explicit activation.
+5. Define retention/quotas, key rewrapping, tamper-proof audit storage and backup/restore drills; implement monitored deployment, rollback and versioned release procedures.
+6. Broaden large-dataset, responsive/keyboard/error-state acceptance. Desktop packaging follows web stability.
 
 ## Constraints and handoff
 
 Dedicated registers now query complete server collections. Selection menus and workspace previews remain bounded; report operations retain explicit size and coverage limits.
+
+OIDC provider discovery, provisioning, forced SSO, lifecycle synchronization and live provider compatibility remain separate work. The implemented flow explicitly links existing accounts and preserves local MFA/admission policy.
 
 The deployment remains single-worker. Assessment checks and membership mutation coordination are process-local. Webhook delivery leases are durable but do not make domain writes and enqueue atomic. No production release or multiworker-readiness claim is made.
 

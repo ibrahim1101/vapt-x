@@ -2,13 +2,13 @@
 
 Updated 2026-10-16. **Not ready for production release.** Core workflows have repeatable API, container and browser evidence; the full roadmap and operational acceptance are incomplete.
 
-Verified code: `8bb58f2fcd0524a8961aa75f4c1c55dccfad9b58`. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for current implementation and CI links, and [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) for historical checkpoints.
+Verified code: `45b95b7fa61a833fbad440387cd51d1639df44cf`. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for current implementation and CI links, and [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) for historical checkpoints.
 
 | Gate | Current evidence | Outstanding work |
 |---|---|---|
-| Reproducible installation/build | Backend pins, frozen Yarn, Python 3.11/3.12, 90 frontend tests and production build | Dependency/secret review and release reproducibility policy |
+| Reproducible installation/build | Backend pins, frozen Yarn, Python 3.11/3.12, 98 frontend tests and production build | Dependency/secret review and release reproducibility policy |
 | Startup/configuration/health/body limits | Unit and Compose startup/smoke checks | Monitored deployment and degraded-service operations |
-| Identity and tenant boundaries | 225 backend tests with Mongo; cookie/origin/CSRF, MFA, disable/reactivate, membership, invitation, email-proof and token tests | OIDC and project ACL |
+| Identity and tenant boundaries | 239 backend tests with Mongo; cookie/origin/CSRF, MFA, disable/reactivate, membership, invitation, email-proof, linked OIDC and token tests | Live OIDC provider acceptance and project ACL |
 | Core workflow | Chromium against actual non-root Nginx/API/Mongo; synthetic imports/evidence/remediation/PDF/retest | More large datasets, error/accessibility review and upstream schema variants |
 | Scanner safety | Exact scope/window/profile, pinned transport, timeout/cancel regression and training target | Broader sandboxing and durable worker ownership |
 | Reports/evidence | Checksums, ready-state guards, versioned source snapshots, PDF visual review | Complete-set and size limits still apply; retention/quotas/malware controls |
@@ -21,4 +21,4 @@ Account disable and membership removal block subsequent authenticated operations
 
 No production deployment, merge or release has been performed. Use synthetic data for demonstrations and retain the supported single-worker topology. Readiness requires evidence for the remaining operational gates, not merely a successful build.
 
-Latest code acceptance includes open/invitation-only/closed registration, optional mandatory email proof, strict stored-session expiry, matching-account invitations, and complete evidence/report/scope/member/scan-job/task/audit navigation beyond 1,000 records, UTC overdue/date behavior, independent execution records, event detail inspection and explicit two-organization browser audit isolation. All four workflows passed for `8bb58f2fcd0524a8961aa75f4c1c55dccfad9b58`; published CI links are in the feature matrix.
+Latest code acceptance includes explicitly linked OIDC/local-MFA sign-in and unlink/cancellation, open/invitation-only/closed registration, optional mandatory email proof, strict stored-session expiry, matching-account invitations, and complete evidence/report/scope/member/scan-job/task/audit navigation beyond 1,000 records, UTC overdue/date behavior, independent execution records, event detail inspection and explicit two-organization browser audit isolation. All four workflows passed for `45b95b7fa61a833fbad440387cd51d1639df44cf`; published CI links are in the feature matrix.

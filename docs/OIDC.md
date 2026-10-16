@@ -1,6 +1,6 @@
 # Optional linked OIDC sign-in
 
-OIDC is disabled by default. It adds an alternative sign-in method for existing accounts explicitly linked by their owner. It never creates users, matches identities by email, changes registered-email proof, assigns roles, or trusts provider MFA as a substitute for local MFA. Local password sign-in remains available. Organization admission and disabled-account/credential-epoch checks still apply.
+OIDC is disabled by default. It adds an alternative sign-in method for existing accounts explicitly linked by their owner. It never creates users, matches identities by email, changes registered-email proof, assigns roles, or trusts provider MFA as a substitute for local MFA. Local password sign-in remains available. Password changes/recovery invalidate pending proofs via the credential epoch but retain the identity link; remove the link if the provider identity may be compromised. Organization admission and disabled-account/credential-epoch checks still apply.
 
 Configure one confidential web client using `OIDC_ENABLED=1`, `OIDC_ISSUER`, `OIDC_AUTHORIZATION_URL`, `OIDC_TOKEN_URL`, `OIDC_JWKS_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and `OIDC_ENCRYPTION_KEYS`. Generate Fernet keys as for MFA; the first key encrypts short-lived PKCE verifiers and all keys decrypt. Keep old keys for at least the ten-minute flow lifetime when rotating. Do not commit client credentials or keys.
 

@@ -6,7 +6,7 @@ Users, imported scanner reports, evidence and AI text are untrusted. Browser-sup
 
 | Boundary | Implemented control | Remaining limit |
 |---|---|---|
-| Authentication | bcrypt byte limits, cookie sessions, atomic refresh and attempt budgets, password/credential-epoch changes, account disable/reactivate | Registration policy, mandatory email-verification policy and OIDC remain deployment/identity work |
+| Authentication | bcrypt byte limits, cookie sessions, atomic refresh and attempt budgets, password/credential-epoch changes, account disable/reactivate | Explicit registration/verification policy and linked OIDC are available; project ACL and live provider acceptance remain |
 | Browser writes | Exact trusted Origin, CSRF cookie/header checks and credentialed single-origin CORS | Production-origin/cookie/deployment acceptance remains |
 | Cookies | HttpOnly access/refresh cookies, SameSite=Lax, Secure by default; explicit loopback-only development HTTP | Supported browser/deployment combinations still require operational acceptance |
 | MFA | Encrypted TOTP, atomic replay checks, hash-only one-use recovery codes and step-up for credential administration | Optional operator key; no automatic key rewrapping |
@@ -33,3 +33,5 @@ Invitation acceptance rechecks the recipient account and issuing administrator's
 Use only disposable identities, owned training fixtures and mocked mail/AI/webhook delivery for default acceptance. Do not commit real secrets or customer evidence. Production readiness requires the outstanding operational gates and broader authorization/error-path review, not merely passing synthetic workflows.
 
 Registration can be explicitly open, invitation-only or closed. Optional mandatory email proof gates every workspace request, including existing API tokens, while retaining limited browser account/verification controls. See [identity policy](IDENTITY_POLICY.md) for rollout and owner access requirements. All browser authentication reads require an unrevoked, owned session whose stored expiry is strictly in the future; missing/expired deadlines fail closed even when the access JWT itself is fresh.
+
+Optional [OIDC](OIDC.md) requires explicit linking to an existing account using its password/local MFA. Provider email claims do not match or verify accounts, and no organization access is provisioned. Sign-in uses one-use browser-bound state, encrypted PKCE, nonce and signed ID-token validation against fixed public HTTPS endpoints. Local MFA and admission policy remain authoritative. Linking/unlinking increments the credential epoch. Local logout does not revoke identity-provider sessions; provider lifecycle changes do not automatically revoke local sessions. Callback access queries are redacted in built-in Nginx/Uvicorn; additional infrastructure must be configured separately.
