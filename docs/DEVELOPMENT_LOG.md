@@ -315,3 +315,16 @@ Local final correlation checkpoint: full backend suite **273 passed, 14 Mongo-de
 ## Analyst severity decision continuation
 
 Continued after the fully green correlation head (`0ef1e8a`) with explicit severity override/restoration. New findings preserve scanner severity; legacy observations capture their unchanged baseline on first decision. Reasoned changes use durable compare-and-swap versions and atomic bounded history; list pages omit history payloads. Details, PDFs, snapshots and exports distinguish effective and original severity. Added API/permission/race/restore regressions, real-Mongo concurrent writes and reimport preservation, component tests and Chromium form acceptance. Local suite before the final Mongo/component additions: **277 passed, 14 skipped, 211 subtests**. CI acceptance pending.
+
+## Final scanner and analyst workflow acceptance — 2026-10-16
+
+Code head `1f15da7ae96195b5cef1fb5685060c1a640c6b34` passed all four CI gates after the severity-decision form-selector correction and PDF limitations-layout correction. The latest code increment preserves the label `severity-decision-submit` so generic form-submit browser assertions remain unambiguous, and keeps the PDF limitations heading with its paragraph. Targeted report tests passed after the layout fix.
+
+- Backend: **291 tests passed on Python 3.11 and 3.12 with disposable MongoDB** — [38964644949](https://github.com/ibrahim1101/vapt-x/actions/runs/38964644949).
+- Frontend: **109 tests in 34 suites and production build passed** — [38964644950](https://github.com/ibrahim1101/vapt-x/actions/runs/38964644950).
+- Docker smoke passed — [38964644939](https://github.com/ibrahim1101/vapt-x/actions/runs/38964644939).
+- Chromium against Nginx/Compose passed — [38964645043](https://github.com/ibrahim1101/vapt-x/actions/runs/38964645043).
+
+This acceptance covers Prowler ASFF and expanded Trivy imports, MobSF Android static JSON imports, structured CVSS/package/reference facts, same-asset/shared-CVE cross-scanner candidate review, and reasoned versioned severity override/restoration. Mongo and browser checks use synthetic fixtures. The candidate register does not merge findings or assign confidence; scanner scores are not recalculated, and applicability/version ordering is not inferred. Mobile/cloud asset kinds are report associations, not active discovery. No live scanner, provider, mail, AI, webhook or OIDC activation; production deployment; merge; or release occurred. The branch remains a draft PR.
+
+The roadmap is still incomplete. Next broad areas are custom roles and service identities; durable assessment ownership/scheduling and multi-process coordination; more upstream import variants and broader correlation/CVSS consistency/version applicability; native scanner/provider adapters; retention, tamper-evident audit, backup/restore and monitored release acceptance. See the current feature matrix and readiness decision for exact boundaries.

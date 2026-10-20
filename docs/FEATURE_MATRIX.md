@@ -43,11 +43,11 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 
 | Check | Result | Run |
 |---|---|---|
-| Backend Python 3.11/3.12 with MongoDB | 287 passed | [38963420256](https://github.com/ibrahim1101/vapt-x/actions/runs/38963420256) |
-| Frontend unit/components and production build | 107 passed, 33 suites; build passed | [38963420010](https://github.com/ibrahim1101/vapt-x/actions/runs/38963420010) |
-| Docker smoke | Passed | [38963420013](https://github.com/ibrahim1101/vapt-x/actions/runs/38963420013) |
-| Chromium against Nginx/Compose | Passed | [38963420015](https://github.com/ibrahim1101/vapt-x/actions/runs/38963420015) |
+| Backend Python 3.11/3.12 with MongoDB | 291 passed | [38964644949](https://github.com/ibrahim1101/vapt-x/actions/runs/38964644949) |
+| Frontend unit/components and production build | 109 passed, 34 suites; build passed | [38964644950](https://github.com/ibrahim1101/vapt-x/actions/runs/38964644950) |
+| Docker smoke | Passed | [38964644939](https://github.com/ibrahim1101/vapt-x/actions/runs/38964644939) |
+| Chromium against Nginx/Compose | Passed | [38964645043](https://github.com/ibrahim1101/vapt-x/actions/runs/38964645043) |
 
-Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests. The browser uses synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
+Mongo tests include tenant boundaries, concurrent authentication/MFA budgets, membership demotion races, account disable/reactivation, token membership lifetime, imports, evidence, PDF snapshots and retests, Prowler/Trivy/MobSF persistence, scanner-fact exports, candidate pagination and severity-decision concurrency/restoration. Browser tests use synthetic identities and the controlled training target. No external scan, live AI request, actual user disablement, merge, release or deployment was performed.
 
 Evidence, report, authorization, membership, scan-job, remediation and audit registers now query complete matching collections, with live 25-row pages. Pagination offsets remain capped at 1,000,000. Selection menus and workspace previews remain bounded; dedicated registers query complete server collections.
