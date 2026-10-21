@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Current verified code: `0ef1e8ac2fe965e6af94737efefbc122f025cf7e`. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
+Updated 2026-10-21. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Custom-role increment is under CI verification on the current development branch. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
 | Area | Implemented and exercised | Remaining limits |
 |---|---|---|
@@ -13,9 +13,10 @@ Updated 2026-10-16. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/
 | Password recovery | Optional TLS SMTP, hash-only expiring one-use links, credential-epoch binding, MFA preservation and old credential invalidation; private fragment-based form | Disabled by default; no durable mail queue or live delivery acceptance |
 | MFA | Encrypted TOTP enrollment, atomic anti-replay, hash-only one-use recovery codes, replacement/removal, step-up for password changes | Optional operator key; no automatic key rewrapping |
 | Accounts | Private paginated security history; platform-owner search and disable/reactivate with password/MFA | History is best effort; owner accounts protected; in-flight work may finish |
-| Organizations | Switching, fixed roles, membership grants/removal, fresh actor and anti-orphan guards, complete member directory/search/role filters and email-bound invitation lifecycle | Invitation acceptance requires the registered matching account; Custom roles and independent service identities remain |
-| API tokens | One-time display, hash-only storage, expiry/revocation, organization/current-role/membership binding, live owner project admission and optional fixed project caps | No independent service identities or custom roles |
-| Tenant boundaries | Organization and membership-project predicates, negative API/browser tests including downloads and jobs | Per-project role overrides/custom roles remain |
+| Organizations | Switching, built-in and organization-scoped custom roles, membership grants/removal, fresh actor and anti-orphan guards, complete member directory/search/role filters and email-bound invitation lifecycle | Invitation acceptance requires the registered matching account; independent service identities remain |
+| Custom roles | UUID role identities, explicit bounded action allowlist, mandatory read access, admin-only versioned CRUD, live policy resolution, assigned-role deletion guard, member assignment UI and permission-aware controls | Single-worker membership coordination; custom roles are not independently authenticated principals or service identities |
+| API tokens | One-time display, hash-only storage, expiry/revocation, organization/current-role/membership binding, live owner project admission, optional fixed project caps and intersection with current custom-role permissions | No independent service identities; role changes affect requests on subsequent authorization checks |
+| Tenant boundaries | Organization and membership-project predicates, negative API/browser tests including downloads, jobs, custom-role ownership and policy resolution | Per-project role overrides remain |
 | Project access | Administrator all/selected membership grants, live browser/token enforcement, scoped counts/files/audit and version-checked updates | Existing grants/invitations default to all; admins retain all; in-flight work and previously downloaded data cannot be recalled |
 | Projects | Metadata, archive/restore, owner labels, templates, complete server pagination/search and related counts | Archive does not withdraw scanning authorization |
 | Assets | Metadata/criticality/tags, bulk registration receipts, server pagination/search/activity | Owner labels confer no permission; target/scope immutable |

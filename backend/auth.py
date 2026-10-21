@@ -12,7 +12,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from pymongo.errors import DuplicateKeyError
 from pymongo import ReturnDocument
 from core import (db, BaseDocument, clean, iso, now, new_id, hash_password, verify_password,
-                  create_access_token, create_refresh_token, decode_token, get_current_user, get_ctx, Ctx, audit, ROLES)
+                  create_access_token, create_refresh_token, decode_token, get_current_user, get_ctx, Ctx, audit, ROLES, PERMS)
 
 from identity_policy import policy,email_verified,allow_registration
 from project_access import metadata as project_access_metadata
@@ -54,7 +54,7 @@ class OrgInput(BaseModel):
 
 class MemberInput(BaseModel):
     email: EmailStr
-    role: str
+    role: str = Field(min_length=1,max_length=100)
 
 
 def public_user(user):
@@ -183,7 +183,15 @@ async def me(user=Depends(get_current_user)):
     for m in memberships:
         org = await db.organizations.find_one({"_id": m["org_id"]})
         if org:
-            orgs.append({"id": str(org["_id"]), "name": org["name"], "role": m["role"],"project_access":project_access_metadata(m)})
+            role_name=m['role'].replace('_',' ')
+            permissions=sorted(PERMS.get(m['role'],set()))
+            if m.get('role')=='custom':
+                from custom_roles import role_permissions
+                role=await db.custom_roles.find_one({'_id':m.get('custom_role_id'),'org_id':str(org['_id']),'active':True})
+                role_name=role.get('name','Unavailable custom role') if role else 'Unavailable custom role'
+                permissions=sorted(await role_permissions(str(org['_id']),m.get('custom_role_id')) or ())
+            orgs.append({"id": str(org["_id"]), "name": org["name"], "role": m["role"],"role_name":role_name,
+                "permissions":permissions,"project_access":project_access_metadata(m)})
     active=user.get("active_org_id")
     if active not in {org["id"] for org in orgs}:active=orgs[0]["id"] if orgs else None
     return {**public_user(user), "active_org_id":active, "organizations": orgs}
@@ -319,13 +327,20 @@ async def members(ctx=Depends(get_ctx)):
     for m in records:
         u = await db.users.find_one({"_id": m["user_id"]})
         if u:
-            result.append({"id": m["user_id"], "name": u.get("name"), "email": u["email"], "role": m["role"],**({"project_access":project_access_metadata(m)} if ctx.role=="org_admin" or m["user_id"]==ctx.uid else {})})
+            role_name=m['role'].replace('_',' ')
+            if m.get('role')=='custom':
+                role=await db.custom_roles.find_one({'_id':m.get('custom_role_id'),'org_id':ctx.org_id,'active':True},{'name':1})
+                role_name=role.get('name','Unavailable custom role') if role else 'Unavailable custom role'
+            result.append({"id": m["user_id"], "name": u.get("name"), "email": u["email"], "role": m["role"],"role_name":role_name,
+                **({'custom_role_id':m.get('custom_role_id')} if ctx.role=='org_admin' else {}),
+                **({'role_version':m.get('role_version',0)} if ctx.role=='org_admin' else {}),
+                **({"project_access":project_access_metadata(m)} if ctx.role=="org_admin" or m["user_id"]==ctx.uid else {})})
     return result
 
 
 @router.get('/members/directory')
 async def member_directory(search: str = Query(default='',max_length=120),
-    role: Literal['org_admin','security_lead','analyst','auditor','viewer'] | None = None,
+    role: Literal['org_admin','security_lead','analyst','auditor','viewer','custom'] | None = None,
     offset: int = Query(default=0,ge=0,le=1_000_000),limit: int = Query(default=25,ge=1,le=100),ctx=Depends(get_ctx)):
     ctx.require('read')
     match = {'org_id':ctx.org_id}
@@ -342,15 +357,21 @@ async def member_directory(search: str = Query(default='',max_length=120),
     pipeline.append({'$facet':{
         'count':[{'$count':'total'}],
         'items':[{'$sort':{'account.email':1,'_id':1}},{'$skip':offset},{'$limit':limit},
-                 {'$project':{'_id':0,'id':'$user_id','name':'$account.name','email':'$account.email','role':1,'project_access':1,'project_access_version':1}}],
+                 {'$project':{'_id':0,'id':'$user_id','name':'$account.name','email':'$account.email','role':1,'custom_role_id':1,'role_version':1,'project_access':1,'project_access_version':1}}],
     }})
     rows = await db.memberships.aggregate(pipeline).to_list(1)
     result = rows[0] if rows else {'count':[],'items':[]}
     total = result['count'][0]['total'] if result['count'] else 0
     for member in result['items']:
+        member['role_name']=member['role'].replace('_',' ')
+        if member['role']=='custom':
+            role=await db.custom_roles.find_one({'_id':member.get('custom_role_id'),'org_id':ctx.org_id,'active':True},{'name':1})
+            member['role_name']=role.get('name','Unavailable custom role') if role else 'Unavailable custom role'
         if ctx.role=='org_admin' or member['id']==ctx.uid:member['project_access']=project_access_metadata(member)
         else:member.pop('project_access',None)
         member.pop('project_access_version',None)
+        if ctx.role!='org_admin':
+            member.pop('custom_role_id',None);member.pop('role_version',None)
     return {'items':result['items'],'total':total,'offset':offset,'limit':limit,
             'has_more':offset+len(result['items'])<total}
 
@@ -364,18 +385,24 @@ async def live_membership_admin(ctx):
 @router.post("/members")
 async def grant_member(body: MemberInput, ctx=Depends(get_ctx)):
     ctx.require("members")
-    if body.role not in ROLES: raise HTTPException(422,"Unknown organization role")
+    from custom_roles import resolve_role_choice
     async with MEMBER_LOCK:
         await live_membership_admin(ctx)
+        selection=await resolve_role_choice(ctx.org_id,body.role)
+        role=selection['role']
         user=await db.users.find_one({"email":str(body.email).lower()})
         if not user: raise HTTPException(404,"User must register before being added")
-        if str(user["_id"])==ctx.uid and body.role!="org_admin": raise HTTPException(400,"You cannot demote yourself")
+        if str(user["_id"])==ctx.uid and role!="org_admin": raise HTTPException(400,"You cannot demote yourself")
         target=await db.memberships.find_one({"org_id":ctx.org_id,"user_id":str(user["_id"])})
-        if target and target["role"]=="org_admin" and body.role!="org_admin" and await db.memberships.count_documents({"org_id":ctx.org_id,"role":"org_admin"})<=1:
+        if target and target["role"]=="org_admin" and role!="org_admin" and await db.memberships.count_documents({"org_id":ctx.org_id,"role":"org_admin"})<=1:
             raise HTTPException(409,"An organization must retain an administrator")
-        await db.memberships.update_one({"org_id":ctx.org_id,"user_id":str(user["_id"])},
-            {"$set":{"role":body.role,**({"project_access":{"mode":"all","project_ids":[]}} if body.role=="org_admin" else {})},"$setOnInsert":{"_id":new_id()},**({"$inc":{"project_access_version":1}} if target and target["role"]!=body.role else {})},upsert=True)
-        await audit(ctx,"membership.granted","users",str(user["_id"]),{"role":body.role})
+        set_fields={"role":role,**selection,**({"project_access":{"mode":"all","project_ids":[]}} if role=="org_admin" else {})}
+        set_fields['role_version']=(target.get('role_version',0)+1) if target else 1
+        update={"$set":set_fields,"$setOnInsert":{"_id":new_id()}}
+        if role!='custom':update['$unset']={'custom_role_id':''}
+        if target and target["role"]!=role:update['$inc']={'project_access_version':1}
+        await db.memberships.update_one({"org_id":ctx.org_id,"user_id":str(user["_id"])},update,upsert=True)
+        await audit(ctx,"membership.granted","users",str(user["_id"]),{"role":role,**({'custom_role_id':selection['custom_role_id']} if role=='custom' else {})})
     return {"ok":True}
 
 

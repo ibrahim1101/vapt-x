@@ -1,7 +1,7 @@
 """Live membership project admission; legacy memberships retain organization-wide access."""
 from fastapi import HTTPException
 
-ORG_COLLECTIONS={'project_templates','api_tokens','webhooks','webhook_deliveries','invitations'}
+ORG_COLLECTIONS={'project_templates','api_tokens','webhooks','webhook_deliveries','invitations','custom_roles'}
 CHILD_COLLECTIONS={'evidence_chunks':('evidence','evidence_id'),'report_files':('reports','report_id'),'report_snapshots':('reports','report_id')}
 PROJECT_COLLECTIONS={'projects','scopes','assets','assessments','jobs','findings','tasks','evidence','reports','inventory_items','finding_comments','ai_sessions','ai_usage','audit_events',*CHILD_COLLECTIONS}
 

@@ -151,11 +151,12 @@ async def get_current_user(request: Request) -> dict:
 
 
 class Ctx:
-    def __init__(self, user, org_id, role):
+    def __init__(self, user, org_id, role, custom_permissions=None):
         self.user = user
         self.uid = user["id"]
         self.org_id = org_id
         self.role = role
+        self.custom_permissions = frozenset(custom_permissions or ())
         self.scopes = user.get("_token_scopes")
         self.membership_id = None
         self.project_ids = None
@@ -165,7 +166,7 @@ class Ctx:
         if self.scopes is not None and perm not in self.scopes and "*" not in self.scopes:
             return False
         p = PERMS.get(self.role, set())
-        return "*" in p or perm in p
+        return "*" in p or perm in p or perm in self.custom_permissions
 
     def require(self, perm: str):
         if not self.can(perm):
@@ -188,7 +189,13 @@ async def get_ctx(request: Request) -> Ctx:
     if user.get("_api_token_id") and not user.get("_token_membership_id"):
         if await db.membership_revocations.find_one({"_id":org_id+":"+user["id"]}):
             raise HTTPException(401,"Legacy API token membership was removed")
-    ctx=Ctx(user,org_id,m["role"])
+    custom_permissions=None
+    if m.get('role')=='custom':
+        from custom_roles import role_permissions
+        custom_permissions=await role_permissions(org_id,m.get('custom_role_id'))
+        if custom_permissions is None:
+            raise HTTPException(403,"Organization role is unavailable; contact an administrator")
+    ctx=Ctx(user,org_id,m["role"],custom_permissions)
     from project_access import effective_projects
     ctx.project_ids=effective_projects(m,user)
     ctx.membership_id=str(m["_id"]) if m.get("_id") else None

@@ -201,6 +201,12 @@ async def run_job(ctx, job_id):
             if ctx.membership_id and str(membership.get('_id'))!=ctx.membership_id:raise ValueError('Organization membership changed before execution')
             ctx.project_ids=allowed
             ctx.role = membership["role"]
+            ctx.custom_permissions=frozenset()
+            if ctx.role=='custom':
+                from custom_roles import role_permissions
+                permissions=await role_permissions(ctx.org_id,membership.get('custom_role_id'))
+                if permissions is None:raise ValueError('Custom role was removed or is unavailable before execution')
+                ctx.custom_permissions=permissions
             ctx.require("scan")
             assessment = await repo.get("assessments", job["assessment_id"])
             asset = await repo.get("assets", job["asset_id"])

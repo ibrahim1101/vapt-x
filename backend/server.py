@@ -19,6 +19,7 @@ from inventory_imports import router as inventory_router
 from governance import router as governance_router
 from api_tokens import router as tokens_router
 from webhooks import router as webhooks_router,configured as webhooks_configured,delivery_loop
+from custom_roles import router as custom_roles_router
 
 
 @asynccontextmanager
@@ -50,6 +51,7 @@ async def lifespan(app):
         await db.invitations.create_index('token_hash',unique=True)
         await db.invitations.create_index('expires_at',expireAfterSeconds=0)
         await db.invitations.create_index([('org_id',1),('created_at',-1),('_id',-1)])
+        await db.custom_roles.create_index([('org_id',1),('name_key',1)],unique=True)
         await db.api_tokens.create_index([('org_id',1),('created_by',1),('revoked',1),('expires_at',1)])
         await db.sla_policies.create_index('org_id',unique=True)
         await db.finding_comments.create_index([('org_id',1),('finding_id',1),('created_at',-1),('_id',-1)])
@@ -138,6 +140,8 @@ app.include_router(inventory_router)
 app.include_router(governance_router)
 
 app.include_router(tokens_router)
+
+app.include_router(custom_roles_router)
 
 app.include_router(webhooks_router)
 
