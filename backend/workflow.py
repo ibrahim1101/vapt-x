@@ -442,8 +442,9 @@ async def create_scan(body: ScanInput, ctx=Depends(get_ctx)):
     async with distributed_lock('scan-admission',ctx.org_id):
         assessment = await repo.get("assessments", body.assessment_id)
         await validate_scope(repo, assessment, asset, body.scanner)
-        active = await repo.list("jobs", {"status": {"$in": ["queued", "running", "cancelling"]}})
-        if len(active) >= 2:
+        active = await db.jobs.count_documents({'org_id':ctx.org_id,
+            'status':{'$in':['queued','running','cancelling']}})
+        if active >= 2:
             raise HTTPException(429, "Two scans are already active in this organization")
         job = await repo.add("jobs", {**body.model_dump(), "project_id": assessment["project_id"], "status": "queued", "source": "execution", "logs": ["Queued for authorization verification"], "checks": [], "finding_count": 0,
             "_execution_actor":execution_actor(ctx)})
@@ -463,7 +464,7 @@ async def import_scan(body: ImportInput, ctx=Depends(get_ctx)):
             raise ValueError("Maximum 2,000 findings per import")
     except Exception as exc:
         raise HTTPException(422, f"Cannot parse this {body.scanner} report: {str(exc)[:180]}")
-    async with JOB_LOCK:
+    async with distributed_lock('scan-state',f'{ctx.org_id}:{assessment["id"]}'):
         assessment = await repo.get("assessments", body.assessment_id)
         await validate_scope(repo, assessment, asset, body.scanner)
         job = await repo.add("jobs", {"assessment_id": assessment["id"], "asset_id": asset["id"], "project_id": assessment["project_id"], "scanner": body.scanner, "source": "import", "status": "completed", "raw_output": "Raw report omitted to avoid retaining secret values or code blocks" if body.scanner in {"gitleaks", "checkov", "trivy", "prowler", "mobsf"} else body.content, "checks": [], "logs": ["Imported scanner-authored output. Not independently verified; asset association declared by uploader."], "finished_at": iso()})

@@ -75,6 +75,16 @@ class AssessmentLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('cancellation_requested_at',self.records['jobs','job'])
         self.assertEqual(self.records['assessments','assessment']['status'],'cancelled')
 
+    async def test_scan_admission_counts_active_jobs_for_the_whole_organization(self):
+        with patch.object(workflow,'validate_scope',new_callable=AsyncMock),patch.object(workflow,'db') as database:
+            database.jobs.count_documents=AsyncMock(return_value=2)
+            with self.assertRaises(HTTPException) as error:
+                await workflow.create_scan(workflow.ScanInput(assessment_id='assessment',asset_id='asset',scanner='safe'),self.ctx)
+        self.assertEqual(error.exception.status_code,429)
+        database.jobs.count_documents.assert_awaited_once_with({'org_id':'org-one',
+            'status':{'$in':['queued','running','cancelling']}})
+        self.repo.add.assert_not_awaited()
+
     async def test_retry_preserves_old_assessment_and_creates_separate_draft(self):
         with self.assertRaises(HTTPException):
             await workflow.retry_assessment('assessment',self.ctx)
