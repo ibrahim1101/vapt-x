@@ -141,7 +141,7 @@ class DurableScanQueueTests(unittest.TestCase):
 
     def test_remote_process_cancellation_stops_worker_and_suppresses_results(self):
         code=textwrap.dedent('''
-            import json,os,subprocess,sys,time,uuid
+            import json,os,subprocess,sys,textwrap,time,uuid
             from datetime import datetime,timezone,timedelta
             from pymongo import MongoClient
             database='vaptx_multiworker_cancel_'+uuid.uuid4().hex
