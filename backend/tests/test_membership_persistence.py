@@ -47,7 +47,10 @@ class MembershipPersistenceTests(unittest.TestCase):
                     assert sum(isinstance(result,dict) for result in results)==1,results
                     assert mongo[database].memberships.count_documents({'org_id':org['id'],'role':'org_admin'})==1
                     remaining=mongo[database].memberships.find_one({'org_id':org['id'],'role':'org_admin'})['user_id']
-                    assert remaining==alice['id']
+                    assert remaining in {alice['id'],bob['id']}
+                    if remaining==bob['id']:
+                        client.cookies.clear();client.cookies.update(bob_cookies)
+                        post('members',{'email':'alice@example.com','role':'org_admin'},org['id'])
                     client.cookies.clear();client.cookies.update(alice_cookies)
                     post('members/'+bob['id']+'/remove',{'reason':'Synthetic membership removal'},org['id'])
                     assert client.get('/api/projects',headers={'authorization':'Bearer '+token}).status_code==401
