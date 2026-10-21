@@ -116,8 +116,29 @@ async def get_current_user(request: Request) -> dict:
     authorization=request.headers.get("authorization", "")
     if authorization:
         scheme, _, raw=authorization.partition(" ")
-        if scheme.lower()!="bearer" or not raw.startswith("vaptx_") or not 40<=len(raw)<=100:
+        if scheme.lower()!="bearer" or not raw.startswith(("vaptx_","vaptxsvc_")) or not 40<=len(raw)<=100:
             raise HTTPException(401,"Invalid API token")
+        if raw.startswith('vaptxsvc_'):
+            credential=await db.service_credentials.find_one(
+                {'token_hash':sha256_hex(raw.encode()),'revoked':False,'expires_at':{'$gt':iso()}})
+            if not credential: raise HTTPException(401,'Invalid, revoked or expired service credential')
+            identity=await db.service_identities.find_one({'_id':credential['identity_id'],'org_id':credential['org_id'],'active':True})
+            if not identity: raise HTTPException(401,'Service identity is disabled')
+            owner=await db.memberships.find_one({'org_id':credential['org_id'],'user_id':identity['owner_user_id']})
+            owner_user=await db.users.find_one({'_id':identity['owner_user_id'],'disabled':{'$ne':True}})
+            if not owner or not owner_user:
+                raise HTTPException(401,'Service identity owner is unavailable; an organization administrator must transfer ownership')
+            touched=await db.service_credentials.update_one(
+                {'_id':credential['_id'],'revoked':False,'expires_at':{'$gt':iso()}},
+                {'$set':{'last_used_at':iso()}})
+            if touched.matched_count!=1: raise HTTPException(401,'Service credential was revoked before authorization completed')
+            user={'id':identity['_id'],'name':identity['name'],'email':f"{identity['name']} (service identity)",
+                '_service_identity_id':identity['_id'],'_service_credential_id':credential['_id'],
+                '_service_owner_id':identity['owner_user_id'],'_token_org':credential['org_id'],
+                '_token_scopes':credential.get('scopes',[]),'_token_project_ids':credential.get('project_ids',[])}
+            enforce_workspace_policy(user,request.url.path)
+            request.state.api_user=user
+            return user
         token=await db.api_tokens.find_one({"token_hash":sha256_hex(raw.encode()),"revoked":False,"expires_at":{"$gt":iso()}})
         if not token:raise HTTPException(401,"Invalid or expired API token")
         user=await db.users.find_one({"_id":token["created_by"]})
@@ -151,21 +172,26 @@ async def get_current_user(request: Request) -> dict:
 
 
 class Ctx:
-    def __init__(self, user, org_id, role, custom_permissions=None):
+    def __init__(self, user, org_id, role, custom_permissions=None, service_permissions=None):
         self.user = user
         self.uid = user["id"]
         self.org_id = org_id
         self.role = role
         self.custom_permissions = frozenset(custom_permissions or ())
+        self.service_permissions = frozenset(service_permissions or ())
         self.scopes = user.get("_token_scopes")
         self.membership_id = None
         self.project_ids = None
+        self.service_identity_id = user.get('_service_identity_id')
+        self.service_credential_id = user.get('_service_credential_id')
+        self.service_owner_id = user.get('_service_owner_id')
 
     def can(self, perm: str) -> bool:
         if self.project_ids is not None and perm in {"integrations", "members"}:return False
         if self.scopes is not None and perm not in self.scopes and "*" not in self.scopes:
             return False
         p = PERMS.get(self.role, set())
+        if self.role=='service': return perm in self.service_permissions
         return "*" in p or perm in p or perm in self.custom_permissions
 
     def require(self, perm: str):
@@ -181,6 +207,24 @@ async def get_ctx(request: Request) -> Ctx:
     org_id = user.get("_token_org") or request.headers.get("X-Org-Id") or user.get("active_org_id")
     if not org_id:
         raise HTTPException(409, "No active organization")
+    if user.get('_service_identity_id'):
+        identity=await db.service_identities.find_one({'_id':user['_service_identity_id'],'org_id':org_id,'active':True})
+        if not identity or identity.get('owner_user_id')!=user.get('_service_owner_id'):
+            raise HTTPException(401,'Service identity changed; administrator handoff or reactivation is required')
+        owner=await db.memberships.find_one({'org_id':org_id,'user_id':identity['owner_user_id']})
+        owner_user=await db.users.find_one({'_id':identity['owner_user_id'],'disabled':{'$ne':True}})
+        if not owner or not owner_user:
+            raise HTTPException(401,'Service identity owner is unavailable; an organization administrator must transfer ownership')
+        identity_projects=identity.get('project_ids',[])
+        credential_projects=user.get('_token_project_ids',[])
+        if not isinstance(identity_projects,list) or not isinstance(credential_projects,list): project_ids=[]
+        else: project_ids=sorted(set(identity_projects).intersection(credential_projects))
+        ctx=Ctx(user,org_id,'service',service_permissions=identity.get('permissions',[]))
+        ctx.project_ids=project_ids
+        ctx.service_identity_id=identity['_id']
+        ctx.service_credential_id=user['_service_credential_id']
+        ctx.service_owner_id=identity['owner_user_id']
+        return ctx
     m = await db.memberships.find_one({"org_id": org_id, "user_id": user["id"]})
     if not m:
         raise HTTPException(404, "Organization not found")
@@ -217,6 +261,8 @@ async def audit(ctx_or_none, action: str, resource_type: str = "", resource_id: 
             if resource:project_id=resource.get('project_id')
     doc = DomainDocument(
         **({'project_id':project_id} if project_id else {}),
+        **({'service_identity_id':ctx_or_none.user.get('_service_identity_id'),
+            'service_credential_id':ctx_or_none.user.get('_service_credential_id')} if ctx_or_none and ctx_or_none.user.get('_service_identity_id') else {}),
         org_id=org_id or ctx_or_none.org_id,
         created_by=ctx_or_none.uid if ctx_or_none else "system",
         actor_id=ctx_or_none.uid if ctx_or_none else None,

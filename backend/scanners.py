@@ -162,6 +162,22 @@ async def store_findings(repo, assessment, asset, job, rows):
 
 async def execution_credentials(ctx):
     """Recheck the initiating credential before any target resolution or execution."""
+    if ctx.user.get('_service_identity_id'):
+        credential=await db.service_credentials.find_one({'_id':ctx.service_credential_id,
+            'org_id':ctx.org_id,'identity_id':ctx.service_identity_id,'revoked':False,'expires_at':{'$gt':iso()}})
+        identity=await db.service_identities.find_one({'_id':ctx.service_identity_id,'org_id':ctx.org_id,'active':True})
+        if not credential or not identity or identity.get('owner_user_id')!=ctx.service_owner_id:
+            raise ValueError('Service identity or credential changed before execution')
+        owner=await db.memberships.find_one({'org_id':ctx.org_id,'user_id':identity['owner_user_id']})
+        owner_user=await db.users.find_one({'_id':identity['owner_user_id'],'disabled':{'$ne':True}})
+        if not owner or not owner_user:raise ValueError('Service identity owner access was revoked before execution')
+        identity_projects=identity.get('project_ids',[]);credential_projects=credential.get('project_ids',[])
+        if not isinstance(identity_projects,list) or not isinstance(credential_projects,list):raise ValueError('Service identity project policy is invalid')
+        ctx.project_ids=sorted(set(identity_projects).intersection(credential_projects))
+        ctx.service_permissions=frozenset(identity.get('permissions',[]))
+        ctx.scopes=credential.get('scopes',[])
+        ctx.user={**ctx.user,'_token_project_ids':credential_projects,'_token_scopes':ctx.scopes}
+        return
     user = await db.users.find_one({"_id": ctx.uid})
     epoch = ctx.user.get("credential_version", 0)
     if not user or user.get("disabled") or user.get("credential_version", 0) != epoch:
@@ -192,21 +208,25 @@ async def run_job(ctx, job_id):
             if job["status"] != "queued":
                 return
             await execution_credentials(ctx)
-            membership = await db.memberships.find_one({"org_id": ctx.org_id, "user_id": ctx.uid})
-            if not membership:
-                raise ValueError("Organization access was revoked")
-            from project_access import effective_projects
-            allowed=effective_projects(membership,ctx.user)
-            if allowed is not None and job.get('project_id') not in allowed:raise ValueError('Project access was revoked before execution')
-            if ctx.membership_id and str(membership.get('_id'))!=ctx.membership_id:raise ValueError('Organization membership changed before execution')
-            ctx.project_ids=allowed
-            ctx.role = membership["role"]
-            ctx.custom_permissions=frozenset()
-            if ctx.role=='custom':
-                from custom_roles import role_permissions
-                permissions=await role_permissions(ctx.org_id,membership.get('custom_role_id'))
-                if permissions is None:raise ValueError('Custom role was removed or is unavailable before execution')
-                ctx.custom_permissions=permissions
+            if ctx.user.get('_service_identity_id'):
+                allowed=ctx.project_ids
+                if job.get('project_id') not in allowed:raise ValueError('Service identity project access was revoked before execution')
+            else:
+                membership = await db.memberships.find_one({"org_id": ctx.org_id, "user_id": ctx.uid})
+                if not membership:
+                    raise ValueError("Organization access was revoked")
+                from project_access import effective_projects
+                allowed=effective_projects(membership,ctx.user)
+                if allowed is not None and job.get('project_id') not in allowed:raise ValueError('Project access was revoked before execution')
+                if ctx.membership_id and str(membership.get('_id'))!=ctx.membership_id:raise ValueError('Organization membership changed before execution')
+                ctx.project_ids=allowed
+                ctx.role = membership["role"]
+                ctx.custom_permissions=frozenset()
+                if ctx.role=='custom':
+                    from custom_roles import role_permissions
+                    permissions=await role_permissions(ctx.org_id,membership.get('custom_role_id'))
+                    if permissions is None:raise ValueError('Custom role was removed or is unavailable before execution')
+                    ctx.custom_permissions=permissions
             ctx.require("scan")
             assessment = await repo.get("assessments", job["assessment_id"])
             asset = await repo.get("assets", job["asset_id"])

@@ -26,6 +26,7 @@ def email_verified(user):
     return bool(user.get('email_verified_at') and user.get('email_verified_address')==user.get('email'))
 
 def enforce_workspace_policy(user,path):
+    if user.get('_service_identity_id'):return
     if not policy()['require_verified_email'] or email_verified(user):return
     # Unverified browser sessions can only reach their own recovery/verification
     # controls. They cannot enroll MFA, mint tokens, create/join organizations or

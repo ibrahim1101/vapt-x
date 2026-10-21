@@ -327,11 +327,11 @@ async def members(ctx=Depends(get_ctx)):
     for m in records:
         u = await db.users.find_one({"_id": m["user_id"]})
         if u:
-            role_name=m['role'].replace('_',' ')
+            role_name=None
             if m.get('role')=='custom':
                 role=await db.custom_roles.find_one({'_id':m.get('custom_role_id'),'org_id':ctx.org_id,'active':True},{'name':1})
                 role_name=role.get('name','Unavailable custom role') if role else 'Unavailable custom role'
-            result.append({"id": m["user_id"], "name": u.get("name"), "email": u["email"], "role": m["role"],"role_name":role_name,
+            result.append({"id": m["user_id"], "name": u.get("name"), "email": u["email"], "role": m["role"],**({'role_name':role_name} if role_name else {}),
                 **({'custom_role_id':m.get('custom_role_id')} if ctx.role=='org_admin' else {}),
                 **({'role_version':m.get('role_version',0)} if ctx.role=='org_admin' else {}),
                 **({"project_access":project_access_metadata(m)} if ctx.role=="org_admin" or m["user_id"]==ctx.uid else {})})
@@ -363,7 +363,6 @@ async def member_directory(search: str = Query(default='',max_length=120),
     result = rows[0] if rows else {'count':[],'items':[]}
     total = result['count'][0]['total'] if result['count'] else 0
     for member in result['items']:
-        member['role_name']=member['role'].replace('_',' ')
         if member['role']=='custom':
             role=await db.custom_roles.find_one({'_id':member.get('custom_role_id'),'org_id':ctx.org_id,'active':True},{'name':1})
             member['role_name']=role.get('name','Unavailable custom role') if role else 'Unavailable custom role'
