@@ -139,7 +139,7 @@ class DurableScanQueueTests(unittest.TestCase):
         result=subprocess.run([sys.executable,'-c',code],text=True,capture_output=True,env=os.environ.copy(),timeout=45)
         self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
 
-    def test_remote_process_cancellation_stops_worker_and_suppresses_results(self):
+    def test_remote_process_cancellation_and_successful_terminal_result(self):
         code=textwrap.dedent('''
             import json,os,subprocess,sys,textwrap,time,uuid
             from datetime import datetime,timezone,timedelta
@@ -161,6 +161,8 @@ class DurableScanQueueTests(unittest.TestCase):
                 'created_at':now.isoformat(),'scope_id':'scope-one','target':'training://local'})
             db.assessments.insert_one({'_id':'assessment-one','org_id':'org-one','project_id':'project-one',
                 'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'draft'})
+            db.assessments.insert_one({'_id':'assessment-success','org_id':'org-one','project_id':'project-one',
+                'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'draft'})
             db.users.insert_one({'_id':'analyst','name':'Synthetic Analyst','email':'analyst@example.com',
                 'credential_version':0,'disabled':False})
             db.memberships.insert_one({'_id':'membership-one','org_id':'org-one','user_id':'analyst','role':'analyst',
@@ -173,6 +175,11 @@ class DurableScanQueueTests(unittest.TestCase):
                 'created_at':now.isoformat(),'scanner':'safe','source':'execution','status':'queued',
                 '_execution_actor':actor,'_worker_lease_owner':'worker-one',
                 '_worker_lease_expires_at':future})
+            db.jobs.insert_one({'_id':'job-success','org_id':'org-one','project_id':'project-one',
+                'assessment_id':'assessment-success','asset_id':'asset-one','created_by':'analyst',
+                'created_at':now.isoformat(),'scanner':'safe','source':'execution','status':'queued',
+                '_execution_actor':actor,'_worker_lease_owner':'worker-success',
+                '_worker_lease_expires_at':future})
             child_code=textwrap.dedent("""
                 import asyncio,json,sys
                 from core import Ctx,db
@@ -180,13 +187,16 @@ class DurableScanQueueTests(unittest.TestCase):
                 async def hold_check(*args):
                     await db.worker_signals.update_one({'_id':'check-started'}, {'$set':{'ready':True}},upsert=True)
                     await asyncio.Event().wait()
+                async def successful_check(*args):return [],[]
                 async def run():
-                    if sys.argv[1]=='worker':
-                        scanners.safe_checks=hold_check
-                        job=await db.jobs.find_one({'_id':'job-one'})
+                    if sys.argv[1] in {'worker','complete'}:
+                        job_id='job-one' if sys.argv[1]=='worker' else 'job-success'
+                        worker_id='worker-one' if sys.argv[1]=='worker' else 'worker-success'
+                        scanners.safe_checks=hold_check if sys.argv[1]=='worker' else successful_check
+                        job=await db.jobs.find_one({'_id':job_id})
                         ctx=await scanners.execution_context(job['_execution_actor'])
-                        await scanners.run_job(ctx,'job-one',worker_id='worker-one')
-                        current=await db.jobs.find_one({'_id':'job-one'})
+                        await scanners.run_job(ctx,job_id,worker_id=worker_id)
+                        current=await db.jobs.find_one({'_id':job_id})
                         return {'job_status':current['status']}
                     from workflow import ScopeRevocationInput,cancel_assessment
                     ctx=Ctx({'id':'analyst','email':'analyst@example.com'},'org-one','analyst')
@@ -212,6 +222,13 @@ class DurableScanQueueTests(unittest.TestCase):
                 assert db.assessments.find_one({'_id':'assessment-one'})['status']=='cancelled'
                 assert db.jobs.find_one({'_id':'job-one'})['status']=='cancelled'
                 assert db.findings.count_documents({'job_id':'job-one'})==0
+                completed=subprocess.run([sys.executable,'-c',child_code,'complete'],text=True,
+                    capture_output=True,env=os.environ.copy(),timeout=20)
+                assert completed.returncode==0,completed.stdout+'\\n'+completed.stderr
+                assert json.loads(completed.stdout.strip().splitlines()[-1])=={'job_status':'completed'}
+                assert db.jobs.find_one({'_id':'job-success'})['status']=='completed'
+                assert db.assessments.find_one({'_id':'assessment-success'})['status']=='review'
+                assert db.jobs.find_one({'_id':'job-success'})['finding_count']==0
             finally:
                 if worker.poll() is None:worker.kill();worker.wait()
                 mongo.drop_database(database);mongo.close()
