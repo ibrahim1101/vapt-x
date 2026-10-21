@@ -1,5 +1,6 @@
 """Project access cannot be broadened by caller predicates, roles or legacy blobs."""
 import unittest
+import asyncio
 from unittest.mock import AsyncMock,patch,MagicMock
 from types import SimpleNamespace
 import test_projects
@@ -44,7 +45,7 @@ class ProjectAccessTests(unittest.IsolatedAsyncioTestCase):
    db.__getitem__.return_value.insert_one.assert_not_called()
  async def test_project_grant_fresh_actor_admin_protection_and_conditional_write(self):
   ctx=Ctx({'id':'admin','credential_version':2},'org','org_admin');ctx.membership_id='actor'
-  with patch.object(project_membership,'db') as db,patch.object(project_membership,'audit',new_callable=AsyncMock):
+  with patch('auth.MEMBER_LOCK',asyncio.Lock()),patch.object(project_membership,'db') as db,patch.object(project_membership,'audit',new_callable=AsyncMock):
    actor={'_id':'actor','role':'org_admin'};target={'_id':'member','role':'analyst'}
    db.memberships.find_one=AsyncMock(side_effect=[actor,target]);db.users.find_one=AsyncMock(return_value={'credential_version':2})
    db.projects.count_documents=AsyncMock(return_value=1);db.memberships.update_one=AsyncMock(return_value=SimpleNamespace(matched_count=1))
@@ -78,7 +79,7 @@ class QueuedScanAccessTests(unittest.IsolatedAsyncioTestCase):
 class GrantVersionTests(unittest.IsolatedAsyncioTestCase):
  async def test_stale_editor_cannot_overwrite_newer_project_access(self):
   ctx=Ctx({'id':'admin'},'org','org_admin')
-  with patch.object(project_membership,'db') as db:
+  with patch('auth.MEMBER_LOCK',asyncio.Lock()),patch.object(project_membership,'db') as db:
    db.memberships.find_one=AsyncMock(side_effect=[{'_id':'actor','role':'org_admin'},{'_id':'member','role':'viewer','project_access_version':2}])
    db.users.find_one=AsyncMock(return_value={'_id':'admin'})
    with self.assertRaises(HTTPException) as error:await project_membership.set_project_access('target',project_membership.ProjectAccessInput(mode='all',expected_version=1),ctx)

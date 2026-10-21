@@ -1,5 +1,4 @@
 """Organization-owned service principals with capped, one-time credentials."""
-import asyncio
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -12,9 +11,11 @@ from pymongo.errors import DuplicateKeyError
 
 from core import Ctx, db, get_ctx, iso, new_id, sha256_hex, audit
 from repository import Repository
+from distributed_locks import LeaseFactory
+from auth import membership_lock
 
 router = APIRouter(prefix='/api')
-SERVICE_LOCK = asyncio.Lock()
+SERVICE_LOCK = LeaseFactory('service-identities')
 SERVICE_ID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', re.I)
 ServicePermission = Literal['read','write','scan','report','report_read','triage','remediate','ai','evidence','audit']
 SERVICE_PERMISSIONS = frozenset({'read','write','scan','report','report_read','triage','remediate','ai','evidence','audit'})
@@ -151,76 +152,81 @@ async def list_identities(ctx=Depends(get_ctx)):
 
 @router.post('/service-identities')
 async def create_identity(body:IdentityInput,ctx=Depends(get_ctx)):
-    await admin_actor(ctx)
-    await owner_in_org(ctx.org_id,body.owner_user_id)
-    await validate_projects(ctx,body.project_ids)
-    name_key=body.name.casefold()
-    if await db.service_identities.find_one({'org_id':ctx.org_id,'name_key':name_key}):
-        raise HTTPException(409,'A service identity with this name already exists')
-    row={'_id':new_id(),'org_id':ctx.org_id,'name':body.name,'name_key':name_key,'owner_user_id':body.owner_user_id,
-        'permissions':body.permissions,'project_ids':body.project_ids,'active':True,'version':1,
-        'created_by':ctx.uid,'created_at':iso(),'updated_at':iso()}
-    async with SERVICE_LOCK:
-        if await db.service_identities.count_documents({'org_id':ctx.org_id})>=100:
-            raise HTTPException(409,'An organization can have at most 100 service identities')
-        try: await db.service_identities.insert_one(row)
-        except DuplicateKeyError: raise HTTPException(409,'A service identity with this name already exists') from None
+    async with membership_lock(ctx.org_id):
+        await admin_actor(ctx)
+        await owner_in_org(ctx.org_id,body.owner_user_id)
+        await validate_projects(ctx,body.project_ids)
+        name_key=body.name.casefold()
+        if await db.service_identities.find_one({'org_id':ctx.org_id,'name_key':name_key}):
+            raise HTTPException(409,'A service identity with this name already exists')
+        row={'_id':new_id(),'org_id':ctx.org_id,'name':body.name,'name_key':name_key,'owner_user_id':body.owner_user_id,
+            'permissions':body.permissions,'project_ids':body.project_ids,'active':True,'version':1,
+            'created_by':ctx.uid,'created_at':iso(),'updated_at':iso()}
+        async with SERVICE_LOCK.for_scope(ctx.org_id):
+            if await db.service_identities.count_documents({'org_id':ctx.org_id})>=100:
+                raise HTTPException(409,'An organization can have at most 100 service identities')
+            try: await db.service_identities.insert_one(row)
+            except DuplicateKeyError: raise HTTPException(409,'A service identity with this name already exists') from None
     await audit(ctx,'service_identity.created','service_identities',row['_id'],{'owner_user_id':body.owner_user_id,'permissions':body.permissions,'project_ids':body.project_ids})
     return identity_metadata(row)
 
 
 @router.patch('/service-identities/{identity_id}')
 async def update_identity(identity_id:str,body:IdentityUpdate,ctx=Depends(get_ctx)):
-    await admin_actor(ctx)
-    async with SERVICE_LOCK:
-        identity=await get_identity(ctx.org_id,identity_id)
-        await owner_in_org(ctx.org_id,body.owner_user_id)
-        await validate_projects(ctx,body.project_ids)
-        name_key=body.name.casefold()
-        if name_key!=identity.get('name_key') and await db.service_identities.find_one({'org_id':ctx.org_id,'name_key':name_key,'_id':{'$ne':identity_id}}):
-            raise HTTPException(409,'A service identity with this name already exists')
-        change={'name':body.name,'name_key':name_key,'owner_user_id':body.owner_user_id,'permissions':body.permissions,
-            'project_ids':body.project_ids,'active':body.active,'version':body.expected_version+1,'updated_at':iso()}
-        try:
-            updated=await db.service_identities.find_one_and_update({'_id':identity_id,'org_id':ctx.org_id,'version':body.expected_version},
-                {'$set':change},return_document=ReturnDocument.AFTER)
-        except DuplicateKeyError: raise HTTPException(409,'A service identity with this name already exists') from None
-        if not updated: raise HTTPException(409,'Service identity changed; reload before saving')
-        await audit(ctx,'service_identity.updated','service_identities',identity_id,{'version':updated['version'],'owner_user_id':body.owner_user_id,'permissions':body.permissions,'project_ids':body.project_ids,'active':body.active})
+    async with membership_lock(ctx.org_id):
+        await admin_actor(ctx)
+        async with SERVICE_LOCK.for_scope(ctx.org_id):
+            identity=await get_identity(ctx.org_id,identity_id)
+            await owner_in_org(ctx.org_id,body.owner_user_id)
+            await validate_projects(ctx,body.project_ids)
+            name_key=body.name.casefold()
+            if name_key!=identity.get('name_key') and await db.service_identities.find_one({'org_id':ctx.org_id,'name_key':name_key,'_id':{'$ne':identity_id}}):
+                raise HTTPException(409,'A service identity with this name already exists')
+            change={'name':body.name,'name_key':name_key,'owner_user_id':body.owner_user_id,'permissions':body.permissions,
+                'project_ids':body.project_ids,'active':body.active,'version':body.expected_version+1,'updated_at':iso()}
+            try:
+                updated=await db.service_identities.find_one_and_update({'_id':identity_id,'org_id':ctx.org_id,'version':body.expected_version},
+                    {'$set':change},return_document=ReturnDocument.AFTER)
+            except DuplicateKeyError: raise HTTPException(409,'A service identity with this name already exists') from None
+            if not updated: raise HTTPException(409,'Service identity changed; reload before saving')
+            await audit(ctx,'service_identity.updated','service_identities',identity_id,{'version':updated['version'],'owner_user_id':body.owner_user_id,'permissions':body.permissions,'project_ids':body.project_ids,'active':body.active})
     return identity_metadata(updated)
 
 
 @router.post('/service-identities/{identity_id}/credentials')
 async def create_credential(identity_id:str,body:CredentialInput,ctx=Depends(get_ctx)):
-    await admin_actor(ctx)
-    async with SERVICE_LOCK:
-        identity=await get_identity(ctx.org_id,identity_id,active=True)
-        return await issue_credential(ctx,identity,body)
+    async with membership_lock(ctx.org_id):
+        await admin_actor(ctx)
+        async with SERVICE_LOCK.for_scope(ctx.org_id):
+            identity=await get_identity(ctx.org_id,identity_id,active=True)
+            return await issue_credential(ctx,identity,body)
 
 
 @router.post('/service-identities/{identity_id}/credentials/{credential_id}/revoke')
 async def revoke_credential(identity_id:str,credential_id:str,ctx=Depends(get_ctx)):
-    await admin_actor(ctx)
-    await get_identity(ctx.org_id,identity_id)
-    if not SERVICE_ID.fullmatch(credential_id): raise HTTPException(404,'Credential not found')
-    updated=await db.service_credentials.find_one_and_update({'_id':credential_id,'org_id':ctx.org_id,'identity_id':identity_id,'revoked':False},
-        {'$set':{'revoked':True,'revoked_at':iso()}},return_document=ReturnDocument.AFTER)
-    row=updated or await db.service_credentials.find_one({'_id':credential_id,'org_id':ctx.org_id,'identity_id':identity_id})
-    if not row: raise HTTPException(404,'Credential not found')
-    if updated: await audit(ctx,'service_credential.revoked','service_identities',identity_id,{'credential_id':credential_id})
+    async with membership_lock(ctx.org_id):
+        await admin_actor(ctx)
+        await get_identity(ctx.org_id,identity_id)
+        if not SERVICE_ID.fullmatch(credential_id): raise HTTPException(404,'Credential not found')
+        updated=await db.service_credentials.find_one_and_update({'_id':credential_id,'org_id':ctx.org_id,'identity_id':identity_id,'revoked':False},
+            {'$set':{'revoked':True,'revoked_at':iso()}},return_document=ReturnDocument.AFTER)
+        row=updated or await db.service_credentials.find_one({'_id':credential_id,'org_id':ctx.org_id,'identity_id':identity_id})
+        if not row: raise HTTPException(404,'Credential not found')
+        if updated: await audit(ctx,'service_credential.revoked','service_identities',identity_id,{'credential_id':credential_id})
     return credential_metadata(row)
 
 
 @router.post('/service-identities/{identity_id}/credentials/{credential_id}/rotate')
 async def rotate_credential(identity_id:str,credential_id:str,body:RotateInput,ctx=Depends(get_ctx)):
-    await admin_actor(ctx)
-    async with SERVICE_LOCK:
-        identity=await get_identity(ctx.org_id,identity_id,active=True)
-        if not SERVICE_ID.fullmatch(credential_id): raise HTTPException(404,'Credential not found')
-        old=await db.service_credentials.find_one({'_id':credential_id,'org_id':ctx.org_id,'identity_id':identity_id,'revoked':False,'expires_at':{'$gt':iso()}})
-        if not old: raise HTTPException(404,'Active credential not found')
-        updated=await db.service_credentials.find_one_and_update({'_id':credential_id,'org_id':ctx.org_id,'identity_id':identity_id,'revoked':False},
-            {'$set':{'revoked':True,'revoked_at':iso()}},return_document=ReturnDocument.AFTER)
-        if not updated: raise HTTPException(409,'Credential changed; reload before rotating')
-        replacement=CredentialInput(scopes=old['scopes'],project_ids=old['project_ids'],expires_days=body.expires_days)
-        return await issue_credential(ctx,identity,replacement,old.get('name',''))
+    async with membership_lock(ctx.org_id):
+        await admin_actor(ctx)
+        async with SERVICE_LOCK.for_scope(ctx.org_id):
+            identity=await get_identity(ctx.org_id,identity_id,active=True)
+            if not SERVICE_ID.fullmatch(credential_id): raise HTTPException(404,'Credential not found')
+            old=await db.service_credentials.find_one({'_id':credential_id,'org_id':ctx.org_id,'identity_id':identity_id,'revoked':False,'expires_at':{'$gt':iso()}})
+            if not old: raise HTTPException(404,'Active credential not found')
+            updated=await db.service_credentials.find_one_and_update({'_id':credential_id,'org_id':ctx.org_id,'identity_id':identity_id,'revoked':False},
+                {'$set':{'revoked':True,'revoked_at':iso()}},return_document=ReturnDocument.AFTER)
+            if not updated: raise HTTPException(409,'Credential changed; reload before rotating')
+            replacement=CredentialInput(scopes=old['scopes'],project_ids=old['project_ids'],expires_days=body.expires_days)
+            return await issue_credential(ctx,identity,replacement,old.get('name',''))

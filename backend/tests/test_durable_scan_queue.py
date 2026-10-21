@@ -72,3 +72,38 @@ class DurableScanQueueTests(unittest.TestCase):
         ''')
         result=subprocess.run([sys.executable,'-c',code],text=True,capture_output=True,env=os.environ.copy())
         self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
+
+    def test_distributed_lease_excludes_contenders_and_rejects_stale_release(self):
+        code=textwrap.dedent('''
+            import asyncio,os,uuid
+            from datetime import datetime,timezone,timedelta
+            from pymongo import MongoClient
+            database='vaptx_distributed_locks_'+uuid.uuid4().hex
+            os.environ.update(MONGO_URL=os.environ['MONGO_TEST_URL'],DB_NAME=database,
+                JWT_SECRET='synthetic-distributed-lock-'*3,ADMIN_EMAIL='owner@example.com',
+                ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
+                INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINARY='nmap',VAPTX_LOCAL_HTTP='1')
+            from core import db
+            from distributed_locks import distributed_lock
+            from fastapi import HTTPException
+            mongo=MongoClient(os.environ['MONGO_TEST_URL'])
+            async def verify():
+                first=distributed_lock('test','org-one',wait_seconds=.1)
+                second=distributed_lock('test','org-one',wait_seconds=.1)
+                await first.__aenter__()
+                try:
+                    try:await second.__aenter__()
+                    except HTTPException as error:assert error.status_code==503
+                    else:raise AssertionError('A concurrent process acquired an active lease')
+                    await db.coordination_locks.update_one({'_id':first.key,'owner_id':first.owner},
+                        {'$set':{'lease_expires_at':datetime.now(timezone.utc)-timedelta(seconds=1)}})
+                    await second.__aenter__()
+                    await first.__aexit__(None,None,None)
+                    current=await db.coordination_locks.find_one({'_id':first.key})
+                    assert current['owner_id']==second.owner
+                finally:await second.__aexit__(None,None,None)
+            try:asyncio.run(verify())
+            finally:mongo.drop_database(database);mongo.close()
+        ''')
+        result=subprocess.run([sys.executable,'-c',code],text=True,capture_output=True,env=os.environ.copy())
+        self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)

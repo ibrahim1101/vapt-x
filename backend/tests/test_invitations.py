@@ -1,4 +1,5 @@
 import unittest
+import asyncio
 from datetime import timedelta
 from unittest.mock import AsyncMock,patch
 import test_projects
@@ -10,6 +11,10 @@ USER={'id':'recipient','email':'recipient@example.com'}
 ITEM={'_id':'invite','org_id':'org','created_by':'issuer','email':USER['email'],'role':'viewer',
       'issuer_membership_id':'issuer-member','issuer_credential_version':0}
 class InvitationTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.member_lock=patch('auth.MEMBER_LOCK',asyncio.Lock())
+        self.member_lock.start();self.addCleanup(self.member_lock.stop)
+
     async def test_email_mismatch_never_reads_authority_or_grants_access(self):
         with patch.object(invitations,'db') as db:
             db.invitations.find_one=AsyncMock(return_value=ITEM)

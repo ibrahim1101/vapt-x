@@ -36,7 +36,7 @@ Set-Location backend
 python -m uvicorn server:app --host 127.0.0.1 --port 8001 --workers 1
 ```
 
-Use a single API worker until distributed membership/service coordination and multiworker scan cancellation/result acceptance are complete. Scan jobs use durable Mongo claims and leases: queued work is picked up after restart, while running work with an expired lease is marked interrupted instead of replayed. Configuration and database connectivity are checked on startup. `/api/live` is liveness; `/api/health` checks database readiness and returns 503 on database failure. If startup fails, check Docker health, port, credentials and required configuration; do not weaken production controls.
+Use a single API worker until multiworker scan admission and cancellation/result acceptance are complete. Membership and service-identity mutations use renewable Mongo leases. Scan jobs use durable Mongo claims and leases: queued work is picked up after restart, while running work with an expired lease is marked interrupted instead of replayed. Configuration and database connectivity are checked on startup. `/api/live` is liveness; `/api/health` checks database readiness and returns 503 on database failure. If startup fails, check Docker health, port, credentials and required configuration; do not weaken production controls.
 
 ## Optional containerized API
 

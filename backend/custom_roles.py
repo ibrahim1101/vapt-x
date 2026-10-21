@@ -139,8 +139,8 @@ async def update_custom_role(role_id:str,body:RoleUpdate,ctx=Depends(get_ctx)):
 
 @router.post('/custom-roles/{role_id}/delete')
 async def delete_custom_role(role_id:str,expected_version:int=Query(ge=1,le=2_147_483_647),ctx=Depends(get_ctx)):
-    from auth import MEMBER_LOCK
-    async with MEMBER_LOCK:
+    from auth import membership_lock
+    async with membership_lock(ctx.org_id):
         await current_admin(ctx)
         if not ROLE_ID.fullmatch(role_id):
             raise HTTPException(404,'Custom role not found')

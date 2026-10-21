@@ -41,6 +41,7 @@ async def lifespan(app):
             await db[collection].create_index([('org_id', 1), ('created_at', -1)])
         await db.jobs.create_index([('status',1),('created_at',1),('_id',1)])
         await db.jobs.create_index([('status',1),('_worker_lease_expires_at',1)])
+        await db.coordination_locks.create_index('lease_expires_at',expireAfterSeconds=3600)
         await db.audit_events.create_index([('org_id',1),('created_at',-1),('_id',-1)])
         await db.findings.create_index([('org_id', 1), ('project_id', 1), ('created_at', -1), ('_id', -1)])
         await db.findings.create_index([('org_id',1),('project_id',1),('asset_id',1),('cve_ids',1)])

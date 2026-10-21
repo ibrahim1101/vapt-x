@@ -1,4 +1,4 @@
-"""Optional email-bound invitations. Membership coordination requires one API worker."""
+"""Optional email-bound invitations coordinated by renewable Mongo membership leases."""
 import asyncio
 import logging
 import os
@@ -12,7 +12,7 @@ from pydantic import BaseModel,EmailStr,Field
 from pymongo import ReturnDocument
 from pymongo.errors import PyMongoError
 from core import db,get_ctx,get_current_user,Ctx,new_id,now,iso,sha256_hex,audit
-from auth import MEMBER_LOCK,charge_auth_attempt,account_event
+from auth import membership_lock,charge_auth_attempt,account_event
 from account_recovery import mail_configuration,send_message,MAIL_SLOTS
 from repository import Repository
 
@@ -79,7 +79,7 @@ async def list_invitations(search:str=Query(default='',max_length=120),
 async def create_invitation(body:InvitationInput,ctx=Depends(get_ctx)):
     ctx.require('members');config=require_configuration()
     await charge_auth_attempt('invitation-send',ctx.uid)
-    async with MEMBER_LOCK:
+    async with membership_lock(ctx.org_id):
         member,issuer=await administrator(ctx)
         recipient=str(body.email).lower()
         target=await db.users.find_one({'email':recipient})
@@ -104,7 +104,7 @@ async def create_invitation(body:InvitationInput,ctx=Depends(get_ctx)):
 
 @router.post('/invitations/{invitation_id}/revoke')
 async def revoke_invitation(invitation_id:str,ctx=Depends(get_ctx)):
-    async with MEMBER_LOCK:
+    async with membership_lock(ctx.org_id):
         await administrator(ctx)
         item=await Repository(ctx).get('invitations',invitation_id)
         if item['status']!='pending':raise HTTPException(409,'Only pending invitations can be revoked')
@@ -139,7 +139,8 @@ async def accept_invitation(body:Acceptance,user=Depends(get_current_user)):
     if user.get('_token_scopes') is not None:raise HTTPException(403,'Use a browser session to accept invitations')
     require_configuration()
     await charge_auth_attempt('invitation-accept',user['id'])
-    async with MEMBER_LOCK:
+    hint,_=await valid_invitation(body,user)
+    async with membership_lock(hint['org_id']):
         item,organization=await valid_invitation(body,user)
         existing=await db.memberships.find_one({'org_id':item['org_id'],'user_id':user['id']})
         claimed=await db.invitations.find_one_and_update({'_id':item['_id'],'status':'pending','expires_at':{'$gt':now()}},

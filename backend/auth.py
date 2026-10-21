@@ -1,7 +1,6 @@
 import os
 import re
 from typing import Literal
-import asyncio
 import secrets
 import logging
 import hashlib
@@ -16,10 +15,15 @@ from core import (db, BaseDocument, clean, iso, now, new_id, hash_password, veri
 
 from identity_policy import policy,email_verified,allow_registration
 from project_access import metadata as project_access_metadata
+from distributed_locks import LeaseFactory
 
 router = APIRouter(prefix="/api")
-# The application currently requires one API worker (scanner ownership is also local).
-MEMBER_LOCK = asyncio.Lock()
+MEMBER_LOCK = LeaseFactory('membership')
+
+
+def membership_lock(org_id):
+    """Allow unit tests to substitute an async lock while production uses Mongo leases."""
+    return MEMBER_LOCK.for_scope(org_id) if isinstance(MEMBER_LOCK,LeaseFactory) else MEMBER_LOCK
 
 
 class Credentials(BaseModel):
@@ -385,7 +389,7 @@ async def live_membership_admin(ctx):
 async def grant_member(body: MemberInput, ctx=Depends(get_ctx)):
     ctx.require("members")
     from custom_roles import resolve_role_choice
-    async with MEMBER_LOCK:
+    async with membership_lock(ctx.org_id):
         await live_membership_admin(ctx)
         selection=await resolve_role_choice(ctx.org_id,body.role)
         role=selection['role']
@@ -418,7 +422,7 @@ class MemberRemoval(BaseModel):
 async def remove_member(user_id:str,body:MemberRemoval,ctx=Depends(get_ctx)):
     ctx.require("members")
     if user_id==ctx.uid:raise HTTPException(409,"You cannot remove your own organization membership")
-    async with MEMBER_LOCK:
+    async with membership_lock(ctx.org_id):
         await live_membership_admin(ctx)
         membership=await db.memberships.find_one({"org_id":ctx.org_id,"user_id":user_id})
         if not membership:raise HTTPException(404,"Organization membership not found")

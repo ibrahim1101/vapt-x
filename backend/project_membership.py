@@ -3,7 +3,7 @@ from typing import Literal,Annotated
 from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel,Field,model_validator
 from core import db,get_ctx,iso,audit
-from auth import MEMBER_LOCK
+from auth import membership_lock
 from project_access import metadata
 
 router=APIRouter(prefix='/api')
@@ -27,7 +27,7 @@ async def current_admin(ctx):
 
 @router.post('/members/{user_id}/project-access')
 async def set_project_access(user_id:str,body:ProjectAccessInput,ctx=Depends(get_ctx)):
-    async with MEMBER_LOCK:
+    async with membership_lock(ctx.org_id):
         await current_admin(ctx)
         target=await db.memberships.find_one({'org_id':ctx.org_id,'user_id':user_id})
         if not target:raise HTTPException(404,'Organization membership not found')
