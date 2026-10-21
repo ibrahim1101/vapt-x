@@ -109,7 +109,7 @@ class DurableScanQueueTests(unittest.TestCase):
                     contender_code='import asyncio\\nfrom distributed_locks import distributed_lock\\nfrom fastapi import HTTPException\\nasync def verify():\\n try: await distributed_lock("test","org-one",wait_seconds=.05).__aenter__()\\n except HTTPException as error: assert error.status_code==503\\n else: raise AssertionError("Another process acquired the active lease")\\nasyncio.run(verify())'
                     contender=subprocess.run([sys.executable,'-c',contender_code],text=True,capture_output=True,
                         env=os.environ.copy(),timeout=15)
-                    assert contender.returncode==0,contender.stdout+'\n'+contender.stderr
+                    assert contender.returncode==0,contender.stdout+chr(10)+contender.stderr
                     try:await second.__aenter__()
                     except HTTPException as error:assert error.status_code==503
                     else:raise AssertionError('A concurrent process acquired an active lease')
