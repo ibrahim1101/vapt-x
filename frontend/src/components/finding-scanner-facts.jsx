@@ -10,6 +10,7 @@ export function FindingScannerFacts({finding}) {
       <strong>CVSS {score.version}: {score.score??'Score not supplied'}</strong>
       <p>{score.source}</p>
       {score.score_consistency==='consistent'&&<p className="muted tiny">Matches the calculated CVSS base score: {score.calculated_base_score}.</p>}
+      {score.score_consistency==='score_missing'&&<p className="muted tiny">Calculated CVSS base score from this vector: {score.calculated_base_score}. No source score was supplied.</p>}
       {score.score_consistency==='mismatch'&&<p className="muted tiny" role="note">The source score does not match this base vector. Calculated base score: {score.calculated_base_score}. The source score is preserved.</p>}
       <code>{score.vector}</code>
     </div>)}

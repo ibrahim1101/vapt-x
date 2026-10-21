@@ -75,7 +75,7 @@ class DurableScanQueueTests(unittest.TestCase):
 
     def test_distributed_lease_excludes_contenders_and_rejects_stale_release(self):
         code=textwrap.dedent('''
-            import asyncio,os,uuid
+            import asyncio,os,uuid,subprocess,sys
             from datetime import datetime,timezone,timedelta
             from pymongo import MongoClient
             database='vaptx_distributed_locks_'+uuid.uuid4().hex
@@ -106,6 +106,10 @@ class DurableScanQueueTests(unittest.TestCase):
                 second=distributed_lock('test','org-one',wait_seconds=.1)
                 await first.__aenter__()
                 try:
+                    contender_code='import asyncio\\nfrom distributed_locks import distributed_lock\\nfrom fastapi import HTTPException\\nasync def verify():\\n try: await distributed_lock("test","org-one",wait_seconds=.05).__aenter__()\\n except HTTPException as error: assert error.status_code==503\\n else: raise AssertionError("Another process acquired the active lease")\\nasyncio.run(verify())'
+                    contender=subprocess.run([sys.executable,'-c',contender_code],text=True,capture_output=True,
+                        env=os.environ.copy(),timeout=15)
+                    assert contender.returncode==0,contender.stdout+'\n'+contender.stderr
                     try:await second.__aenter__()
                     except HTTPException as error:assert error.status_code==503
                     else:raise AssertionError('A concurrent process acquired an active lease')
