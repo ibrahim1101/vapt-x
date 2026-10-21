@@ -3,6 +3,13 @@ from core import db, DomainDocument, iso, audit
 from project_access import ORG_COLLECTIONS,CHILD_COLLECTIONS,require_all_projects
 
 
+def public_document(doc):
+    """Keep queue authority and lease metadata private from API responses."""
+    data=DomainDocument.from_mongo(doc).model_dump()
+    return {key:value for key,value in data.items()
+        if key!='_execution_actor' and not key.startswith('_worker_lease_')}
+
+
 class Repository:
     """All domain access injects organization scope, including background jobs."""
     def __init__(self, ctx):
@@ -28,14 +35,14 @@ class Repository:
 
     async def list(self, collection, filters=None, limit=1000):
         docs = await db[collection].find(await self.read_query(collection,filters), {"triage_history": 0, "severity_history": 0}).sort("created_at", -1).limit(limit).to_list(limit)
-        return [DomainDocument.from_mongo(d).model_dump() for d in docs]
+        return [public_document(d) for d in docs]
 
     async def page(self, collection, filters=None, offset=0, limit=25, projection=None):
         query = await self.read_query(collection,filters)
         total = await db[collection].count_documents(query)
         docs = await db[collection].find(query, projection if projection is not None else {"triage_history": 0, "severity_history": 0}).sort(
             [("created_at", -1), ("_id", -1)]).skip(offset).limit(limit).to_list(limit)
-        return {"items": [DomainDocument.from_mongo(d).model_dump() for d in docs],
+        return {"items": [public_document(d) for d in docs],
                 "total": total, "offset": offset, "limit": limit,
                 "has_more": offset + len(docs) < total}
 
@@ -55,7 +62,7 @@ class Repository:
                 await self.get(parent,doc.get(key))
         if not doc:
             raise HTTPException(404, "Resource not found")
-        return DomainDocument.from_mongo(doc).model_dump()
+        return public_document(doc)
 
     async def add(self, collection, fields, log=True):
         if self.ctx.project_ids is not None:
@@ -72,7 +79,7 @@ class Repository:
         await db[collection].insert_one(doc.to_mongo())
         if log:
             await audit(self.ctx, f"{collection}.created", collection, doc.id)
-        return doc.model_dump()
+        return public_document(doc.to_mongo())
 
     async def update(self, collection, oid, fields, log=True):
         if collection=="project_templates":require_all_projects(self.ctx)

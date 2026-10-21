@@ -13,6 +13,7 @@ Updated 2026-10-20. The existing React/FastAPI/Mongo/Docker application is retai
 
 - Membership project admission across browser/token queries, aggregates, reports/evidence and audit; admin grant editor with version checks and optional immutable API-token project caps. Custom-role/service-identity design boundaries are documented.
 - Organization-scoped custom roles with explicit permissions, versioned live updates and human membership assignment. Independent service identities now have explicit human ownership/handoff, fixed hash-only credentials, expiry, rotation/revocation, live action/project intersections and queued-scan revalidation.
+- Durable scan queue claims use atomic Mongo leases and private initiator references; queued jobs resume after restart, while abandoned running jobs become interrupted rather than replaying potentially partial scans. Cross-worker coordination and acceptance remain in progress.
 - Operator-only dry-run/apply key rewrapping for MFA, webhooks and OIDC, with conditional updates and original timestamp preservation.
 - Runtime validation, request/resource limits, reproducible dependencies, API/frontend containers and CI.
 - Cookie sessions, atomic refresh and password budgets, password changes, encrypted TOTP/recovery, private account history and owner-only account disable/reactivate.
@@ -31,7 +32,7 @@ Updated 2026-10-20. The existing React/FastAPI/Mongo/Docker application is retai
 
 ## Next implementation order
 
-1. Add durable assessment ownership/cancellation/recovery and scheduling. Replace process-local membership and service-identity coordination before enabling multiple API workers.
+1. Finish distributed membership/service-identity coordination, scan concurrency admission and cancellation/result atomicity; add multiworker restart, lease-loss and cancellation acceptance before enabling multiple API workers. Recurring scan schedules remain separate work.
 2. Expand upstream import schema fixtures, CVSS score/vector consistency and package affected-range/version evaluation; broaden correlation beyond the implemented same-asset/CVE candidates; distinguish observations, imported assertions and analyst decisions.
 3. Add one native ticket/notification integration at a time with credential storage, bounded egress, tenant isolation and explicit activation.
 4. Define retention/quotas, key distribution/retirement policy, tamper-proof audit storage and backup/restore drills; implement monitored deployment, rollback and versioned release procedures.

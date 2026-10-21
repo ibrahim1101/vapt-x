@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import secrets
+import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -21,11 +22,13 @@ from api_tokens import router as tokens_router
 from webhooks import router as webhooks_router,configured as webhooks_configured,delivery_loop
 from custom_roles import router as custom_roles_router
 from service_identities import router as service_identities_router
+from scanners import scan_worker_loop, recover_expired_scan_leases
 
 
 @asynccontextmanager
 async def lifespan(app):
     webhook_worker=None
+    scan_worker=None
     try:
         from account_recovery import mail_configuration
         mail_configuration('EMAIL_VERIFICATION_ENABLED')
@@ -36,6 +39,8 @@ async def lifespan(app):
         await db.sessions.create_index([('user_id', 1), ('revoked', 1), ('created_at', -1)])
         for collection in ('project_templates', 'projects', 'scopes', 'assets', 'assessments', 'jobs', 'findings', 'tasks', 'evidence', 'evidence_chunks', 'reports', 'report_files', 'audit_events', 'ai_sessions'):
             await db[collection].create_index([('org_id', 1), ('created_at', -1)])
+        await db.jobs.create_index([('status',1),('created_at',1),('_id',1)])
+        await db.jobs.create_index([('status',1),('_worker_lease_expires_at',1)])
         await db.audit_events.create_index([('org_id',1),('created_at',-1),('_id',-1)])
         await db.findings.create_index([('org_id', 1), ('project_id', 1), ('created_at', -1), ('_id', -1)])
         await db.findings.create_index([('org_id',1),('project_id',1),('asset_id',1),('cve_ids',1)])
@@ -61,11 +66,19 @@ async def lifespan(app):
         await db.finding_comments.create_index([('org_id',1),('finding_id',1),('created_at',-1),('_id',-1)])
         await db.inventory_items.create_index([('org_id',1),('asset_id',1),('fingerprint',1)],unique=True)
         await db.evidence_chunks.create_index([('org_id', 1), ('evidence_id', 1), ('index', 1)], unique=True)
-        await db.jobs.update_many({'status': {'$in': ['queued', 'running', 'cancelling']}}, {'$set': {'status': 'interrupted', 'error': 'Worker restarted before completion; run again.', 'finished_at': iso()}})
+        await db.jobs.update_many({'status':'running','_worker_lease_expires_at':{'$exists':False}},
+            {'$set':{'status':'interrupted','error':'Worker stopped before durable scan ownership was enabled; create a new scan.','finished_at':iso()}})
+        await db.jobs.update_many({'status':'cancelling','_worker_lease_expires_at':{'$exists':False}},
+            {'$set':{'status':'cancelled','finished_at':iso()}})
+        await recover_expired_scan_leases()
+        scan_worker=asyncio.create_task(scan_worker_loop(str(uuid.uuid4())))
         if webhooks_configured():webhook_worker=asyncio.create_task(delivery_loop())
         logging.getLogger(__name__).info('VAPT-X database initialization completed')
         yield
     finally:
+        if scan_worker:
+            scan_worker.cancel()
+            await asyncio.gather(scan_worker,return_exceptions=True)
         if webhook_worker:
             webhook_worker.cancel()
             await asyncio.gather(webhook_worker,return_exceptions=True)

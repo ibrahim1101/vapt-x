@@ -77,10 +77,10 @@ class ServiceIdentityPersistenceTests(unittest.TestCase):
               replacement=rotated.json()['token']
               assert client.get('/api/projects',headers=bearer).status_code==401
               assert client.get('/api/projects?limit=100',headers={'authorization':'Bearer '+replacement}).status_code==200
+              other_org=client.post('/api/organizations',headers=headers(),json={'name':'Other service tenant'}).json()
+              assert client.get('/api/projects',headers={'authorization':'Bearer '+replacement,'x-org-id':other_org['id']}).status_code==404
               assert client.post('/api/service-identities/'+identity['id']+'/credentials/'+rotated.json()['id']+'/revoke',headers=headers(org_id)).status_code==200
               assert client.get('/api/projects',headers={'authorization':'Bearer '+replacement}).status_code==401
-              other_org=client.post('/api/organizations',headers=headers(),json={'name':'Other service tenant'}).json()
-              assert client.get('/api/projects',headers={**bearer,'x-org-id':other_org['id']}).status_code==404
 
             finally:
              mongo.drop_database(database);mongo.close()

@@ -4,17 +4,21 @@ import os
 import shutil
 import socket
 import ssl
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timezone, timedelta
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import HTTPException
+from pymongo import ReturnDocument
 from core import db, Ctx, clean, iso, audit, sha256_hex
 from repository import Repository
 from importers import finding, parse_report
 
 JOB_LOCK = asyncio.Lock()
 ACTIVE_CHECKS = {}  # Single-worker managed child tasks, keyed by organization/job.
+SCAN_LEASE_SECONDS = 30
+SCAN_WORKER_POLL_SECONDS = 1
 
 SCANNERS = {"safe", "nmap", "nuclei", "semgrep", "trivy", "zap", "gitleaks", "checkov", "prowler", "mobsf", "openapi", "cyclonedx", "spdx"}
 
@@ -199,13 +203,129 @@ async def execution_credentials(ctx):
             raise ValueError("Session revoked or expired before execution")
 
 
-async def run_job(ctx, job_id):
+def execution_actor(ctx):
+    """Persist only references needed to revalidate the initiator after a restart."""
+    user=ctx.user
+    common={'org_id':ctx.org_id,'user_id':ctx.uid}
+    if user.get('_service_identity_id'):
+        return {**common,'kind':'service','identity_id':user['_service_identity_id'],
+            'credential_id':user['_service_credential_id'],'owner_id':user['_service_owner_id']}
+    if user.get('_api_token_id'):
+        return {**common,'kind':'api_token','token_id':user['_api_token_id'],
+            'membership_id':user.get('_token_membership_id')}
+    return {**common,'kind':'session','session_id':user.get('_sid'),
+        'credential_version':user.get('credential_version',0),'membership_id':ctx.membership_id}
+
+
+async def execution_context(actor):
+    """Rebuild a minimal context from durable identifiers; run_job rechecks authority."""
+    if not isinstance(actor,dict) or not actor.get('org_id') or not actor.get('kind'):
+        raise ValueError('Queued scan has no valid execution authority reference')
+    org_id=actor['org_id']
+    if actor['kind']=='service':
+        identity=await db.service_identities.find_one({'_id':actor.get('identity_id'),'org_id':org_id})
+        if not identity:raise ValueError('Service identity no longer exists')
+        user={'id':identity['_id'],'name':identity['name'],'email':f"{identity['name']} (service identity)",
+            '_service_identity_id':identity['_id'],'_service_credential_id':actor.get('credential_id'),
+            '_service_owner_id':actor.get('owner_id'),'_token_org':org_id,
+            '_token_scopes':[],'_token_project_ids':[]}
+        return Ctx(user,org_id,'service')
+    user_doc=await db.users.find_one({'_id':actor.get('user_id'),'disabled':{'$ne':True}})
+    if not user_doc:raise ValueError('Scan initiator is unavailable')
+    user=clean(user_doc)
+    if actor['kind']=='session':
+        user['_sid']=actor.get('session_id')
+        user['credential_version']=actor.get('credential_version',0)
+    elif actor['kind']=='api_token':
+        token=await db.api_tokens.find_one({'_id':actor.get('token_id'),'org_id':org_id})
+        if not token:raise ValueError('Scan API token is unavailable')
+        user.update(_api_token_id=actor['token_id'],_token_org=org_id,
+            _token_membership_id=actor.get('membership_id'),_token_scopes=token.get('scopes',[]),
+            _token_project_ids=token.get('project_ids'))
+    else:
+        raise ValueError('Queued scan initiator type is not supported')
+    membership=await db.memberships.find_one({'org_id':org_id,'user_id':actor.get('user_id')})
+    if not membership:raise ValueError('Scan initiator organization access is unavailable')
+    from project_access import effective_projects
+    ctx=Ctx(user,org_id,membership.get('role','viewer'))
+    ctx.membership_id=actor.get('membership_id')
+    ctx.project_ids=effective_projects(membership,user)
+    return ctx
+
+
+async def recover_expired_scan_leases():
+    """Mark abandoned running work interrupted; never replay a partially executed scan."""
+    now_value=iso()
+    await db.jobs.update_many({'status':'running','_worker_lease_expires_at':{'$lte':now_value}},
+        {'$set':{'status':'interrupted','error':'Worker lease expired; create a new scan to continue.',
+            'finished_at':now_value},'$unset':{'_worker_lease_owner':'','_worker_lease_expires_at':''}})
+    await db.jobs.update_many({'status':'cancelling','_worker_lease_expires_at':{'$lte':now_value}},
+        {'$set':{'status':'cancelled','finished_at':now_value},
+            '$unset':{'_worker_lease_owner':'','_worker_lease_expires_at':''}})
+
+
+async def claim_queued_scan(worker_id):
+    now_value=iso()
+    lease_until=iso(datetime.now(timezone.utc)+timedelta(seconds=SCAN_LEASE_SECONDS))
+    return await db.jobs.find_one_and_update(
+        {'status':'queued','$or':[{'_worker_lease_expires_at':{'$exists':False}},
+            {'_worker_lease_expires_at':{'$lte':now_value}}]},
+        {'$set':{'_worker_lease_owner':worker_id,'_worker_lease_expires_at':lease_until}},
+        sort=[('created_at',1),('_id',1)],return_document=ReturnDocument.AFTER)
+
+
+async def scan_worker_loop(worker_id=None):
+    worker_id=worker_id or str(uuid.uuid4())
+    while True:
+        try:
+            await recover_expired_scan_leases()
+            job=await claim_queued_scan(worker_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            await asyncio.sleep(SCAN_WORKER_POLL_SECONDS)
+            continue
+        if not job:
+            await asyncio.sleep(SCAN_WORKER_POLL_SECONDS)
+            continue
+        try:
+            ctx=await execution_context(job.get('_execution_actor'))
+            await run_job(ctx,str(job['_id']),worker_id=worker_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            now_value=iso()
+            await db.jobs.update_one({'_id':job['_id'],'_worker_lease_owner':worker_id,
+                'status':{'$in':['queued','running']}}, {'$set':{'status':'failed',
+                    'error':str(exc)[:1000],'finished_at':now_value},
+                    '$unset':{'_worker_lease_owner':'','_worker_lease_expires_at':''}})
+
+
+async def maintain_scan_lease(job_id,worker_id,task_holder):
+    while True:
+        await asyncio.sleep(5)
+        lease_until=iso(datetime.now(timezone.utc)+timedelta(seconds=SCAN_LEASE_SECONDS))
+        job=await db.jobs.find_one_and_update(
+            {'_id':job_id,'_worker_lease_owner':worker_id,
+                'status':{'$in':['queued','running','cancelling']}},
+            {'$set':{'_worker_lease_expires_at':lease_until}},
+            projection={'status':1},return_document=ReturnDocument.AFTER)
+        if not job or job.get('status')=='cancelling':
+            task=task_holder.get('task')
+            if task and not task.done():task.cancel()
+            return
+
+
+async def run_job(ctx, job_id, worker_id=None):
     repo = Repository(ctx)
     key = (ctx.org_id, job_id)
+    lease_task=None
     try:
         async with JOB_LOCK:
             job = await repo.get("jobs", job_id)
             if job["status"] != "queued":
+                return
+            if worker_id and not await db.jobs.find_one({'_id':job_id,'_worker_lease_owner':worker_id,'status':'queued'}):
                 return
             await execution_credentials(ctx)
             if ctx.user.get('_service_identity_id'):
@@ -231,7 +351,13 @@ async def run_job(ctx, job_id):
             assessment = await repo.get("assessments", job["assessment_id"])
             asset = await repo.get("assets", job["asset_id"])
             await validate_scope(repo, assessment, asset, job["scanner"])
-            await repo.update("jobs", job_id, {"status": "running", "started_at": iso(), "logs": ["Authorization and approved time window validated.", "Resolving and pinning target address."]}, log=False)
+            fields={"status": "running", "started_at": iso(), "logs": ["Authorization and approved time window validated.", "Resolving and pinning target address."]}
+            if worker_id:
+                claim_filter={'_id':job_id,'org_id':ctx.org_id,'status':'queued','_worker_lease_owner':worker_id}
+                started=await db.jobs.update_one(claim_filter,{'$set':fields})
+                if started.matched_count!=1:return
+            else:
+                await repo.update("jobs", job_id, fields, log=False)
             async def execute():
                 ip = "127.0.0.1" if asset["target"] == "training://local" else await resolve_public(target_host(asset["target"]))
                 if job["scanner"] == "safe":
@@ -241,6 +367,8 @@ async def run_job(ctx, job_id):
                 return rows, checks, raw, ip
             task = asyncio.create_task(execute())
             ACTIVE_CHECKS[key] = task
+            task_holder={'task':task}
+            lease_task=asyncio.create_task(maintain_scan_lease(job_id,worker_id,task_holder)) if worker_id else None
         rows, checks, raw, ip = await task
         async with JOB_LOCK:
             # Cancellation and finding persistence are serialized. A cancelled
@@ -268,4 +396,10 @@ async def run_job(ctx, job_id):
             await repo.update("jobs", job_id, {"status": status, "error": str(detail)[:1000], "finished_at": iso()}, log=False)
         await audit(ctx, "scan." + status, "jobs", job_id, {"error": str(detail)[:300]})
     finally:
+        if lease_task:
+            lease_task.cancel()
+            await asyncio.gather(lease_task,return_exceptions=True)
+        if worker_id:
+            await db.jobs.update_one({'_id':job_id,'_worker_lease_owner':worker_id},
+                {'$unset':{'_worker_lease_owner':'','_worker_lease_expires_at':''}})
         ACTIVE_CHECKS.pop(key, None)

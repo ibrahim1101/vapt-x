@@ -4,13 +4,13 @@ import os
 import shutil
 from datetime import date, datetime, timezone
 from typing import Literal
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from core import get_ctx, iso, audit, db, DomainDocument
 from pymongo import ReturnDocument
 from pymongo.errors import PyMongoError
 from repository import Repository
-from scanners import target_host, validate_scope, run_job, SCANNERS, store_findings, JOB_LOCK, ACTIVE_CHECKS
+from scanners import target_host, validate_scope, SCANNERS, store_findings, JOB_LOCK, ACTIVE_CHECKS, execution_actor
 from importers import parse_report
 from governance import sla_policy,sla_state
 from ai_providers import public_configuration
@@ -433,7 +433,7 @@ async def create_assessment(body: AssessmentInput, ctx=Depends(get_ctx)):
 
 
 @router.post("/scans")
-async def create_scan(body: ScanInput, background: BackgroundTasks, ctx=Depends(get_ctx)):
+async def create_scan(body: ScanInput, ctx=Depends(get_ctx)):
     ctx.require("scan")
     repo = Repository(ctx)
     assessment = await repo.get("assessments", body.assessment_id)
@@ -444,8 +444,8 @@ async def create_scan(body: ScanInput, background: BackgroundTasks, ctx=Depends(
         active = await repo.list("jobs", {"status": {"$in": ["queued", "running", "cancelling"]}})
         if len(active) >= 2:
             raise HTTPException(429, "Two scans are already active in this organization")
-        job = await repo.add("jobs", {**body.model_dump(), "project_id": assessment["project_id"], "status": "queued", "source": "execution", "logs": ["Queued for authorization verification"], "checks": [], "finding_count": 0})
-    background.add_task(run_job, ctx, job["id"])
+        job = await repo.add("jobs", {**body.model_dump(), "project_id": assessment["project_id"], "status": "queued", "source": "execution", "logs": ["Queued for authorization verification"], "checks": [], "finding_count": 0,
+            "_execution_actor":execution_actor(ctx)})
     return job
 
 

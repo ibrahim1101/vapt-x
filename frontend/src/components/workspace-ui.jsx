@@ -12,7 +12,7 @@ export const Empty = ({ title, description, action }) => <div className="empty-s
 export const SectionHead = ({ eyebrow, title, description, children }) => <div className="section-head"><div><div className="eyebrow">{eyebrow || 'WORKSPACE / OVERVIEW'}</div><h1>{title}</h1>{description && <p>{description}</p>}</div><div className="head-actions">{children}</div></div>;
 export const Panel = ({ title, subtitle, action, children, className = '' }) => <section className={`panel ${className}`}><div className="panel-head"><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>{action}</div>{children}</section>;
 export const Modal = ({ title, description, open, onClose, children }) => <Dialog open={open} onOpenChange={v => !v && onClose()}><DialogContent className="vx-modal" data-testid="workspace-modal"><DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{description || 'Changes are saved to your active organization.'}</DialogDescription></DialogHeader>{children}</DialogContent></Dialog>;
-export const Submit = ({ busy, children = 'Save changes' }) => <Action testId="form-submit" type="submit" disabled={busy}>{busy ? <><Loader2 className="spin" size={15} /> Saving…</> : <>{children}<ArrowUpRight size={15} /></>}</Action>;
+export const Submit = ({ busy, children = 'Save changes', testId = 'form-submit' }) => <Action testId={testId} type="submit" disabled={busy}>{busy ? <><Loader2 className="spin" size={15} /> Saving…</> : <>{children}<ArrowUpRight size={15} /></>}</Action>;
 
 export const DataTable = ({ rows, columns, onRow, name = 'records', empty, searchPlaceholder = 'Search records…' }) => {
   const [search, setSearch] = useState(''), [page, setPage] = useState(0), [sort, setSort] = useState(null);
