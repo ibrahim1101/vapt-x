@@ -2,7 +2,7 @@
 
 An organization-scoped workspace for authorized security assessments, scanner-report imports, evidence, remediation and versioned reporting. The existing React, FastAPI, MongoDB and Docker application is retained.
 
-Start with the [local development guide](docs/WINDOWS_LOCAL_DEV.md) and [testing guide](docs/TESTING.md). Scan jobs and short membership/service-identity mutation sections now use Mongo leases, but the supported deployment still requires one API worker while scan admission, cancellation/result atomicity and full multiworker failure acceptance remain incomplete.
+Start with the [local development guide](docs/WINDOWS_LOCAL_DEV.md) and [testing guide](docs/TESTING.md). Membership and service-identity changes, organization-wide scan admission, and per-assessment scan state transitions now coordinate through renewable Mongo leases. The supported deployment remains one API worker until multiworker failure and recovery acceptance is complete.
 
 - [Current implementation and acceptance evidence](docs/FEATURE_MATRIX.md)
 - [Architecture](docs/ARCHITECTURE.md) and [security model](docs/SECURITY_MODEL.md)

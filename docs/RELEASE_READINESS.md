@@ -2,7 +2,7 @@
 
 Updated 2026-10-21. **Not ready for production release.** Core workflows have repeatable API, container and browser evidence; the full roadmap and operational acceptance are incomplete.
 
-Verified code: `22ae65292fa6c4682ab0758b59f2bc84d92f2644`. Backend passed with Mongo on Python 3.11/3.12 (**312 tests each**); frontend passed (**112 tests in 36 suites plus production build**); Docker smoke and real Nginx/Compose Chromium passed: [backend](https://github.com/ibrahim1101/vapt-x/actions/runs/39588413237), [frontend](https://github.com/ibrahim1101/vapt-x/actions/runs/39588413096), [Docker](https://github.com/ibrahim1101/vapt-x/actions/runs/39588413098), [Chromium](https://github.com/ibrahim1101/vapt-x/actions/runs/39588413333). See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for current implementation and [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) for historical checkpoints.
+Verified code: `77b14d30466adddefde84b16b1569e639574ca40`. Backend passed with Mongo on Python 3.11/3.12 (**317 tests each**); frontend passed (**112 tests in 36 suites plus production build**); Docker smoke and real Nginx/Compose Chromium passed: [backend](https://github.com/ibrahim1101/vapt-x/actions/runs/39594215369), [frontend](https://github.com/ibrahim1101/vapt-x/actions/runs/39594215287), [Docker](https://github.com/ibrahim1101/vapt-x/actions/runs/39594215290), [Chromium](https://github.com/ibrahim1101/vapt-x/actions/runs/39594215289). See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for current implementation and [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) for historical checkpoints.
 
 | Gate | Current evidence | Outstanding work |
 |---|---|---|
@@ -12,7 +12,7 @@ Verified code: `22ae65292fa6c4682ab0758b59f2bc84d92f2644`. Backend passed with M
 | Core workflow | Chromium against actual non-root Nginx/API/Mongo; synthetic imports/evidence/remediation/PDF/retest | More large datasets, error/accessibility review, upstream schema variants and broader correlation/applicability evaluation |
 | Scanner safety | Exact scope/window/profile, fresh queued credential admission, pinned transport, timeout/cancel regression and training target | Broader sandboxing and durable worker ownership |
 | Reports/evidence | Checksums, ready-state guards, versioned source snapshots, PDF visual review | Complete-set and size limits still apply; retention/quotas/malware controls |
-| Deployment topology | Durable Mongo scan claims/leases and renewable membership/service-identity coordination leases; queued work is recovered after restart, stale running work is interrupted without replay | Multiworker cancellation/result atomicity, per-organization admission coordination and lease-loss/failure acceptance are blocking before multiple workers |
+| Deployment topology | Durable Mongo scan claims/leases, organization-wide admission, per-assessment cancellation/result/import coordination and renewable membership/service-identity leases; stale running work is interrupted without replay | Two-process restart, lease-loss, cancellation and recovery acceptance remain blocking before multiple workers |
 | Data operations | Integration/MFA encryption and operator dry-run/CAS secret rewrapping | Retention, backup/restore drills and tamper-proof audit storage |
 | Integrations | Mocked safe webhook delivery and optional provider contracts | No live AI/webhook/mail-provider acceptance; native ticket/chat adapters and durable mail delivery remain |
 | Release operations | CI, images and synthetic acceptance | Upgrade/restore/rollback drills, monitoring/alerting and release/version policy |
