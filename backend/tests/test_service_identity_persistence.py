@@ -49,7 +49,9 @@ class ServiceIdentityPersistenceTests(unittest.TestCase):
               bearer={'authorization':'Bearer '+secret}
               visible=client.get('/api/projects?limit=100',headers=bearer)
               assert visible.status_code==200 and [p['id'] for p in visible.json()['items']]==[first['id']],visible.text
-              assert client.get('/api/projects/'+second['id'],headers=bearer).status_code==404
+              # A project detail GET is not an API route; use the workspace's
+              # project selector to verify that the credential cap hides it.
+              assert client.get('/api/workspace',params={'project_id':second['id']},headers=bearer).status_code==404
               assert client.get('/api/auth/me',headers=bearer).status_code==403
               assert client.get('/api/service-identities',headers=bearer).status_code==403
               # Removing the named human owner suspends service authentication. An administrator handoff is explicit and versioned.
