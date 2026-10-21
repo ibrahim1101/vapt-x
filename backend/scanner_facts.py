@@ -33,8 +33,33 @@ def cvss_fact(vector, score, source):
     if score is not None:
         if isinstance(score,bool) or not isinstance(score,(int,float)) or not math.isfinite(score) or not 0<=score<=10 or round(score,1)!=score:
             raise ValueError('CVSS score must be a finite number from 0 to 10 with at most one decimal')
-    return {'version':version,'score':score,'vector':vector,'source':_text(source,'CVSS source')[:200],
-            'basis':'scanner-provided; score/vector consistency is not recalculated'}
+    fact={'version':version,'score':score,'vector':vector,'source':_text(source,'CVSS source')[:200]}
+    if version in {'3.0','3.1'} and set(base)<=set(seen) and all(value=='X' for key,value in seen.items() if key not in base):
+        calculated=cvss3_base_score(seen)
+        fact['calculated_base_score']=calculated
+        fact['score_consistency']='score_missing' if score is None else 'consistent' if abs(score-calculated)<1e-9 else 'mismatch'
+        fact['basis']='scanner-provided score; CVSS 3 base-only score checked against the FIRST formula'
+    else:
+        fact['score_consistency']='not_checked_contextual_vector' if version in {'3.0','3.1'} else 'not_checked_cvss_4'
+        fact['basis']='scanner-provided score retained; this vector form is not recalculated locally'
+    return fact
+
+
+def cvss3_base_score(metrics):
+    """Calculate the CVSS 3.0/3.1 base score from base metrics only."""
+    av={'N':.85,'A':.62,'L':.55,'P':.20}[metrics['AV']]
+    ac={'L':.77,'H':.44}[metrics['AC']]
+    scope_changed=metrics['S']=='C'
+    pr={'N':.85,'L':.68 if scope_changed else .62,'H':.50 if scope_changed else .27}[metrics['PR']]
+    ui={'N':.85,'R':.62}[metrics['UI']]
+    impact={'N':0,'L':.22,'H':.56}
+    iss=1-(1-impact[metrics['C']])*(1-impact[metrics['I']])*(1-impact[metrics['A']])
+    impact_score=(7.52*(iss-.029)-3.25*(iss-.02)**15) if scope_changed else 6.42*iss
+    if impact_score<=0:return 0.0
+    exploitability=8.22*av*ac*pr*ui
+    score=min((1.08 if scope_changed else 1)*(impact_score+exploitability),10)
+    # FIRST defines Roundup as the next one-decimal value at or above the input.
+    return math.ceil((score-1e-10)*10)/10
 
 
 def references(values):

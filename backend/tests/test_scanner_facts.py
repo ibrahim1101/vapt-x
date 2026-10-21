@@ -13,7 +13,12 @@ class ScannerFactTests(unittest.TestCase):
   self.assertEqual(cvss_fact(V3,0,'scanner')['score'],0)
   self.assertIsNone(cvss_fact(V4,None,'scanner')['score'])
   self.assertEqual(cvss_fact(V3.replace('3.1','3.0'),9.8,'scanner')['version'],'3.0')
-  self.assertIn('not recalculated',cvss_fact(V3,1.0,'source')['basis'])
+  consistent=cvss_fact(V3,9.8,'source')
+  self.assertEqual(consistent['score_consistency'],'consistent');self.assertEqual(consistent['calculated_base_score'],9.8)
+  mismatch=cvss_fact(V3,1.0,'source')
+  self.assertEqual(mismatch['score_consistency'],'mismatch');self.assertEqual(mismatch['calculated_base_score'],9.8)
+  self.assertEqual(cvss_fact(V3+'/E:F',9.8,'source')['score_consistency'],'not_checked_contextual_vector')
+  self.assertEqual(cvss_fact(V4,9.3,'source')['score_consistency'],'not_checked_cvss_4')
   self.assertEqual(cvss_fact(V4+'/E:A/S:P/AU:Y/R:A/V:D/RE:L/U:Red',9.3,'source')['version'],'4.0')
  def test_invalid_metrics_versions_order_and_scores_are_rejected(self):
   for vector in ('CVSS:3.1/AV:N',V3+'/AV:N',V3.replace('AV:N','AV:F'),V4.replace('/AT:N',''),V4.replace('AV:N/AC:L','AC:L/AV:N'),V4+'/U:Purple',V3.replace('CVSS:3.1','CVSS:2.0'),V3+'/ZZ:N'):
