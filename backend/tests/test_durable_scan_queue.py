@@ -139,6 +139,86 @@ class DurableScanQueueTests(unittest.TestCase):
         result=subprocess.run([sys.executable,'-c',code],text=True,capture_output=True,env=os.environ.copy(),timeout=45)
         self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
 
+    def test_remote_process_cancellation_stops_worker_and_suppresses_results(self):
+        code=textwrap.dedent('''
+            import json,os,subprocess,sys,time,uuid
+            from datetime import datetime,timezone,timedelta
+            from pymongo import MongoClient
+            database='vaptx_multiworker_cancel_'+uuid.uuid4().hex
+            os.environ.update(MONGO_URL=os.environ['MONGO_TEST_URL'],DB_NAME=database,
+                JWT_SECRET='synthetic-multiworker-cancel-'*3,ADMIN_EMAIL='owner@example.com',
+                ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
+                INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINARY='nmap',VAPTX_LOCAL_HTTP='1')
+            mongo=MongoClient(os.environ['MONGO_TEST_URL'])
+            db=mongo[database]
+            now=datetime.now(timezone.utc)
+            future=(now+timedelta(minutes=5)).isoformat()
+            db.projects.insert_one({'_id':'project-one','org_id':'org-one','created_by':'owner','created_at':now.isoformat(),'name':'Synthetic'})
+            db.scopes.insert_one({'_id':'scope-one','org_id':'org-one','project_id':'project-one','created_by':'owner',
+                'created_at':now.isoformat(),'host':'training://local','authorized':True,
+                'starts_at':(now-timedelta(minutes=1)).isoformat(),'ends_at':future,'allowed_scanners':['safe']})
+            db.assets.insert_one({'_id':'asset-one','org_id':'org-one','project_id':'project-one','created_by':'owner',
+                'created_at':now.isoformat(),'scope_id':'scope-one','target':'training://local'})
+            db.assessments.insert_one({'_id':'assessment-one','org_id':'org-one','project_id':'project-one',
+                'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'draft'})
+            db.users.insert_one({'_id':'analyst','name':'Synthetic Analyst','email':'analyst@example.com',
+                'credential_version':0,'disabled':False})
+            db.memberships.insert_one({'_id':'membership-one','org_id':'org-one','user_id':'analyst','role':'analyst',
+                'project_access':{'mode':'selected','project_ids':['project-one']}})
+            db.sessions.insert_one({'_id':'session-one','user_id':'analyst','credential_version':0,'revoked':False,'expires_at':future})
+            actor={'org_id':'org-one','user_id':'analyst','kind':'session','session_id':'session-one',
+                'credential_version':0,'membership_id':'membership-one'}
+            db.jobs.insert_one({'_id':'job-one','org_id':'org-one','project_id':'project-one',
+                'assessment_id':'assessment-one','asset_id':'asset-one','created_by':'analyst',
+                'created_at':now.isoformat(),'scanner':'safe','source':'execution','status':'queued',
+                '_execution_actor':actor,'_worker_lease_owner':'worker-one',
+                '_worker_lease_expires_at':future})
+            child_code=textwrap.dedent("""
+                import asyncio,json,sys
+                from core import Ctx,db
+                import scanners
+                async def hold_check(*args):
+                    await db.worker_signals.update_one({'_id':'check-started'}, {'$set':{'ready':True}},upsert=True)
+                    await asyncio.Event().wait()
+                async def run():
+                    if sys.argv[1]=='worker':
+                        scanners.safe_checks=hold_check
+                        job=await db.jobs.find_one({'_id':'job-one'})
+                        ctx=await scanners.execution_context(job['_execution_actor'])
+                        await scanners.run_job(ctx,'job-one',worker_id='worker-one')
+                        current=await db.jobs.find_one({'_id':'job-one'})
+                        return {'job_status':current['status']}
+                    from workflow import ScopeRevocationInput,cancel_assessment
+                    ctx=Ctx({'id':'analyst','email':'analyst@example.com'},'org-one','analyst')
+                    result=await cancel_assessment('assessment-one',ScopeRevocationInput(reason='Synthetic cross-process cancellation'),ctx)
+                    return {'assessment_status':result['status']}
+                print(json.dumps(asyncio.run(run())))
+            """)
+            worker=subprocess.Popen([sys.executable,'-c',child_code,'worker'],text=True,
+                stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=os.environ.copy())
+            try:
+                deadline=time.monotonic()+20
+                while not db.worker_signals.find_one({'_id':'check-started'}):
+                    if worker.poll() is not None:raise AssertionError('Worker exited before scanner execution')
+                    if time.monotonic()>deadline:raise TimeoutError('Worker did not reach scanner execution')
+                    time.sleep(.05)
+                cancelled=subprocess.run([sys.executable,'-c',child_code,'cancel'],text=True,
+                    capture_output=True,env=os.environ.copy(),timeout=15)
+                assert cancelled.returncode==0,cancelled.stdout+'\\n'+cancelled.stderr
+                assert json.loads(cancelled.stdout.strip().splitlines()[-1])=={'assessment_status':'cancelled'}
+                stdout,stderr=worker.communicate(timeout=15)
+                assert worker.returncode==0,stdout+'\\n'+stderr
+                assert json.loads(stdout.strip().splitlines()[-1])=={'job_status':'cancelled'}
+                assert db.assessments.find_one({'_id':'assessment-one'})['status']=='cancelled'
+                assert db.jobs.find_one({'_id':'job-one'})['status']=='cancelled'
+                assert db.findings.count_documents({'job_id':'job-one'})==0
+            finally:
+                if worker.poll() is None:worker.kill();worker.wait()
+                mongo.drop_database(database);mongo.close()
+        ''')
+        result=subprocess.run([sys.executable,'-c',code],text=True,capture_output=True,env=os.environ.copy(),timeout=60)
+        self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
+
     def test_distributed_lease_excludes_contenders_and_rejects_stale_release(self):
         code=textwrap.dedent('''
             import asyncio,os,uuid,subprocess,sys
