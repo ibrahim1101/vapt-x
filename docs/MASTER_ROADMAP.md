@@ -1,6 +1,6 @@
 # VAPT-X engineering roadmap
 
-Updated 2026-10-21. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `77b14d3` passed backend (317 tests with Mongo on Python 3.11/3.12), frontend (112 tests in 36 suites/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Updated 2026-10-21. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `5f56322` passed backend (318 tests with Mongo on Python 3.11/3.12), frontend (112 tests in 36 suites/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Completed increments
 
@@ -15,7 +15,7 @@ Updated 2026-10-21. The existing React/FastAPI/Mongo/Docker application is retai
 - Organization-scoped custom roles with explicit permissions, versioned live updates and human membership assignment. Independent service identities now have explicit human ownership/handoff, fixed hash-only credentials, expiry, rotation/revocation, live action/project intersections and queued-scan revalidation.
 - Durable scan queue claims use atomic Mongo leases and private initiator references; queued jobs resume after restart, while abandoned running jobs become interrupted rather than replaying potentially partial scans. Cross-worker coordination and acceptance remain in progress.
 - Membership/project grants, invitation changes, custom-role deletion and service-identity management/credential issuance now share renewable Mongo leases across API processes; individual record updates retain version/CAS guards.
-- Organization-wide scan admission and per-assessment cancellation/result/import state also coordinate through renewable Mongo leases. Lease heartbeat, takeover, stale-owner release, remote cancellation state and recovery have synthetic unit/integration coverage; complete multiworker failure acceptance remains open.
+- Organization-wide scan admission and per-assessment cancellation/result/import state also coordinate through renewable Mongo leases. Lease heartbeat, takeover, stale-owner release, remote cancellation state and recovery have synthetic unit/integration coverage. A route-level admission race across two API processes confirms the organization cap includes another project; restart, worker-loss, cancellation and recovery acceptance remains open.
 - Scanner facts check CVSS 3.0/3.1 base-only score/vector consistency, retain and label mismatched source scores, and compare exact npm SemVer installed/fix versions as ordering clues. Contextual CVSS and CVSS 4.0 remain source assertions; version ordering does not establish affected or remediated status.
 - Operator-only dry-run/apply key rewrapping for MFA, webhooks and OIDC, with conditional updates and original timestamp preservation.
 - Runtime validation, request/resource limits, reproducible dependencies, API/frontend containers and CI.
