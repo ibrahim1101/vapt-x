@@ -3,8 +3,9 @@ export function FindingScannerFacts({finding}) {
   if(!packageInfo&&!scores.length&&!references.length)return null;
   return <section className="section-gap" data-testid="finding-scanner-facts">
     <h3>Scanner-provided facts</h3>
-    <p className="muted tiny">Separate from scanner severity and analyst triage. CVSS 3.0/3.1 base-only vectors are checked against the FIRST formula. Contextual vectors and CVSS 4.0 remain source assertions and are not recalculated locally. Package version ordering and fix applicability are not evaluated.</p>
+    <p className="muted tiny">Separate from scanner severity and analyst triage. CVSS 3.0/3.1 base-only vectors are checked against the FIRST formula. Contextual vectors and CVSS 4.0 remain source assertions and are not recalculated locally. Exact npm SemVer comparisons are version-order clues only; they do not establish affected ranges or fix applicability.</p>
     {packageInfo&&<dl>{[['name','Package'],['ecosystem','Ecosystem'],['installed_version','Installed version'],['fixed_version','Fixed version'],['path','Package path']].map(([key,label])=><div key={key}><dt>{label}</dt><dd>{packageInfo[key]||'Not reported'}</dd></div>)}</dl>}
+    {packageInfo?.version_comparison&&<p className="muted tiny" role="note">{packageInfo.version_comparison.scheme}: {packageInfo.version_comparison.relation==='installed_before_reported_fix'?'installed version sorts before':'installed version sorts at or after'} the reported fix version. This does not confirm vulnerability or remediation status.</p>}
     {scores.map((score,index)=><div key={index}>
       <strong>CVSS {score.version}: {score.score??'Score not supplied'}</strong>
       <p>{score.source}</p>

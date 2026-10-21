@@ -2,6 +2,7 @@
 import json,unittest
 from scanner_facts import cvss_fact,references
 from importers import parse_report
+from version_facts import compare_semver
 V3='CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'
 V4='CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N'
 TRIVY_FACTS={'Results':[{'Target':'synthetic-image','Type':'debian','Vulnerabilities':[{'VulnerabilityID':'CVE-2099-0001',
@@ -9,6 +10,22 @@ TRIVY_FACTS={'Results':[{'Target':'synthetic-image','Type':'debian','Vulnerabili
  'CweIDs':['CWE-295'],'References':['https://fixture.invalid/advisory','javascript:alert(1)','https://user:pass@fixture.invalid'],
  'CVSS':{'nvd':{'V3Vector':V3,'V3Score':9.8,'V40Vector':V4,'V40Score':9.3}}}]}]}
 class ScannerFactTests(unittest.TestCase):
+ def test_semver_comparison_obeys_numeric_prerelease_and_build_precedence(self):
+  self.assertEqual(compare_semver('1.10.0','1.9.0'),1)
+  self.assertEqual(compare_semver('1.2.0-rc.2','1.2.0-rc.10'),-1)
+  self.assertEqual(compare_semver('1.0.0+fixture','1.0.0'),0)
+  for left,right in [('01.0.0','1.0.0'),('1.0.0','>=1.0.0'),('1.0','1.0.0')]:
+   with self.subTest(left=left,right=right):self.assertIsNone(compare_semver(left,right))
+
+ def test_trivy_compares_only_exact_npm_versions_and_labels_the_limit(self):
+  report={'Results':[{'Type':'npm','Vulnerabilities':[{'VulnerabilityID':'CVE-2099-0001','PkgName':'fixture',
+   'InstalledVersion':'1.9.0','FixedVersion':'1.10.0'}]}]}
+  row=parse_report('trivy',json.dumps(report))[0]
+  self.assertEqual(row['package_info']['version_comparison'],{'scheme':'SemVer 2.0.0','relation':'installed_before_reported_fix'})
+  report['Results'][0]['Vulnerabilities'][0]['FixedVersion']='>=1.10.0'
+  row=parse_report('trivy',json.dumps(report))[0]
+  self.assertNotIn('version_comparison',row['package_info'])
+
  def test_cvss_three_and_four_preserve_source_assertions_with_zero_and_missing_scores(self):
   self.assertEqual(cvss_fact(V3,0,'scanner')['score'],0)
   self.assertIsNone(cvss_fact(V4,None,'scanner')['score'])

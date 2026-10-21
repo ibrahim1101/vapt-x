@@ -1,6 +1,7 @@
 """Scanner-provided structured facts; validate syntax, never infer exploitability."""
 import math
 import re
+from decimal import Decimal, ROUND_CEILING, localcontext
 from urllib.parse import urlsplit
 from importers import _text, _object, _array
 
@@ -47,19 +48,23 @@ def cvss_fact(vector, score, source):
 
 def cvss3_base_score(metrics):
     """Calculate the CVSS 3.0/3.1 base score from base metrics only."""
-    av={'N':.85,'A':.62,'L':.55,'P':.20}[metrics['AV']]
-    ac={'L':.77,'H':.44}[metrics['AC']]
-    scope_changed=metrics['S']=='C'
-    pr={'N':.85,'L':.68 if scope_changed else .62,'H':.50 if scope_changed else .27}[metrics['PR']]
-    ui={'N':.85,'R':.62}[metrics['UI']]
-    impact={'N':0,'L':.22,'H':.56}
-    iss=1-(1-impact[metrics['C']])*(1-impact[metrics['I']])*(1-impact[metrics['A']])
-    impact_score=(7.52*(iss-.029)-3.25*(iss-.02)**15) if scope_changed else 6.42*iss
-    if impact_score<=0:return 0.0
-    exploitability=8.22*av*ac*pr*ui
-    score=min((1.08 if scope_changed else 1)*(impact_score+exploitability),10)
-    # FIRST defines Roundup as the next one-decimal value at or above the input.
-    return math.ceil((score-1e-10)*10)/10
+    with localcontext() as context:
+        context.prec=40
+        d=Decimal
+        av={'N':d('.85'),'A':d('.62'),'L':d('.55'),'P':d('.20')}[metrics['AV']]
+        ac={'L':d('.77'),'H':d('.44')}[metrics['AC']]
+        scope_changed=metrics['S']=='C'
+        pr={'N':d('.85'),'L':d('.68') if scope_changed else d('.62'),
+            'H':d('.50') if scope_changed else d('.27')}[metrics['PR']]
+        ui={'N':d('.85'),'R':d('.62')}[metrics['UI']]
+        impact={'N':d('0'),'L':d('.22'),'H':d('.56')}
+        iss=1-(1-impact[metrics['C']])*(1-impact[metrics['I']])*(1-impact[metrics['A']])
+        impact_score=(d('7.52')*(iss-d('.029'))-d('3.25')*(iss-d('.02'))**15) if scope_changed else d('6.42')*iss
+        if impact_score<=0:return 0.0
+        exploitability=d('8.22')*av*ac*pr*ui
+        score=min((d('1.08') if scope_changed else d('1'))*(impact_score+exploitability),d('10'))
+        # FIRST defines Roundup as the next one-decimal value at or above the input.
+        return float(score.quantize(d('.1'),rounding=ROUND_CEILING))
 
 
 def references(values):
@@ -82,6 +87,9 @@ def trivy_facts(row, group, item):
     package={key:_text(item.get(field),f'Trivy {field}')[:1000] for key,field in
              [('name','PkgName'),('installed_version','InstalledVersion'),('fixed_version','FixedVersion'),('path','PkgPath')]}
     package['ecosystem']=_text(group.get('Type'),'Trivy package Type')[:100]
+    from version_facts import npm_reported_fix_comparison
+    comparison=npm_reported_fix_comparison(package['ecosystem'],package['installed_version'],package['fixed_version'])
+    if comparison:package['version_comparison']=comparison
     if any(package.values()):row['package_info']=package
     if 'References' in item:row['reference_urls']=references(item['References'])
     if 'CVSS' in item:
