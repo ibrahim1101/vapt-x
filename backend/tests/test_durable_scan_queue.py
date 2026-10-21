@@ -84,10 +84,24 @@ class DurableScanQueueTests(unittest.TestCase):
                 ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
                 INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINARY='nmap',VAPTX_LOCAL_HTTP='1')
             from core import db
+            import distributed_locks
             from distributed_locks import distributed_lock
             from fastapi import HTTPException
             mongo=MongoClient(os.environ['MONGO_TEST_URL'])
             async def verify():
+                distributed_locks.LEASE_SECONDS=.2
+                distributed_locks.RENEW_SECONDS=.04
+                heartbeat=distributed_lock('test','heartbeat',wait_seconds=.05)
+                await heartbeat.__aenter__()
+                try:
+                    await asyncio.sleep(.45)
+                    contender=distributed_lock('test','heartbeat',wait_seconds=.05)
+                    try:await contender.__aenter__()
+                    except HTTPException as error:assert error.status_code==503
+                    else:raise AssertionError('An actively renewed lease expired')
+                finally:await heartbeat.__aexit__(None,None,None)
+                distributed_locks.LEASE_SECONDS=120
+                distributed_locks.RENEW_SECONDS=20
                 first=distributed_lock('test','org-one',wait_seconds=.1)
                 second=distributed_lock('test','org-one',wait_seconds=.1)
                 await first.__aenter__()

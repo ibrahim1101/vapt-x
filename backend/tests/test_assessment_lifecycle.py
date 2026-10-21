@@ -27,7 +27,7 @@ class AssessmentLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.object(workflow,'Repository',return_value=self.repo))
         self.enterContext(patch.object(scanners,'Repository',return_value=self.repo))
         lock=asyncio.Lock()
-        self.enterContext(patch.object(workflow,'JOB_LOCK',lock));self.enterContext(patch.object(scanners,'JOB_LOCK',lock))
+        self.enterContext(patch.object(scanners,'JOB_LOCK',lock))
         self.enterContext(patch.object(workflow,'distributed_lock',side_effect=lambda *_args,**_kwargs:lock))
         self.enterContext(patch.object(scanners,'distributed_lock',side_effect=lambda *_args,**_kwargs:lock))
         self.enterContext(patch.dict(scanners.ACTIVE_CHECKS,{},clear=True))

@@ -10,14 +10,13 @@ from core import get_ctx, iso, audit, db, DomainDocument
 from pymongo import ReturnDocument
 from pymongo.errors import PyMongoError
 from repository import Repository
-from scanners import target_host, validate_scope, SCANNERS, store_findings, JOB_LOCK, ACTIVE_CHECKS, execution_actor
+from scanners import target_host, validate_scope, SCANNERS, store_findings, ACTIVE_CHECKS, execution_actor
 from distributed_locks import distributed_lock
 from importers import parse_report
 from governance import sla_policy,sla_state
 from ai_providers import public_configuration
 
 router = APIRouter(prefix="/api")
-SCAN_LOCK = JOB_LOCK
 ASSET_IMPORT_LOCK = asyncio.Lock()
 
 
@@ -437,10 +436,9 @@ async def create_assessment(body: AssessmentInput, ctx=Depends(get_ctx)):
 async def create_scan(body: ScanInput, ctx=Depends(get_ctx)):
     ctx.require("scan")
     repo = Repository(ctx)
-    assessment = await repo.get("assessments", body.assessment_id)
-    asset = await repo.get("assets", body.asset_id)
     async with distributed_lock('scan-admission',ctx.org_id):
         assessment = await repo.get("assessments", body.assessment_id)
+        asset = await repo.get("assets", body.asset_id)
         await validate_scope(repo, assessment, asset, body.scanner)
         active = await db.jobs.count_documents({'org_id':ctx.org_id,
             'status':{'$in':['queued','running','cancelling']}})
@@ -466,6 +464,7 @@ async def import_scan(body: ImportInput, ctx=Depends(get_ctx)):
         raise HTTPException(422, f"Cannot parse this {body.scanner} report: {str(exc)[:180]}")
     async with distributed_lock('scan-state',f'{ctx.org_id}:{assessment["id"]}'):
         assessment = await repo.get("assessments", body.assessment_id)
+        asset = await repo.get("assets", body.asset_id)
         await validate_scope(repo, assessment, asset, body.scanner)
         job = await repo.add("jobs", {"assessment_id": assessment["id"], "asset_id": asset["id"], "project_id": assessment["project_id"], "scanner": body.scanner, "source": "import", "status": "completed", "raw_output": "Raw report omitted to avoid retaining secret values or code blocks" if body.scanner in {"gitleaks", "checkov", "trivy", "prowler", "mobsf"} else body.content, "checks": [], "logs": ["Imported scanner-authored output. Not independently verified; asset association declared by uploader."], "finished_at": iso()})
         count = await store_findings(repo, assessment, asset, job, rows)
