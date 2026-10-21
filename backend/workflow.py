@@ -11,6 +11,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import PyMongoError
 from repository import Repository
 from scanners import target_host, validate_scope, SCANNERS, store_findings, JOB_LOCK, ACTIVE_CHECKS, execution_actor
+from distributed_locks import distributed_lock
 from importers import parse_report
 from governance import sla_policy,sla_state
 from ai_providers import public_configuration
@@ -438,7 +439,7 @@ async def create_scan(body: ScanInput, ctx=Depends(get_ctx)):
     repo = Repository(ctx)
     assessment = await repo.get("assessments", body.assessment_id)
     asset = await repo.get("assets", body.asset_id)
-    async with SCAN_LOCK:
+    async with distributed_lock('scan-admission',ctx.org_id):
         assessment = await repo.get("assessments", body.assessment_id)
         await validate_scope(repo, assessment, asset, body.scanner)
         active = await repo.list("jobs", {"status": {"$in": ["queued", "running", "cancelling"]}})
@@ -656,7 +657,7 @@ async def list_assessments(project_id: str | None = None,
 async def cancel_assessment(assessment_id: str, body: ScopeRevocationInput, ctx=Depends(get_ctx)):
     ctx.require("scan")
     repo = Repository(ctx)
-    async with JOB_LOCK:
+    async with distributed_lock('scan-state',f'{ctx.org_id}:{assessment_id}'):
         assessment = await repo.get("assessments", assessment_id)
         if assessment.get("status") == "cancelled":
             return assessment
@@ -665,8 +666,9 @@ async def cancel_assessment(assessment_id: str, body: ScopeRevocationInput, ctx=
             "cancelled_at": iso(), "cancelled_by": ctx.uid, "cancellation_reason": body.reason})
         for job in jobs:
             task = ACTIVE_CHECKS.get((ctx.org_id, job["id"]))
-            await repo.update("jobs", job["id"], {"status": "cancelling" if task else "cancelled",
-                "cancellation_reason": body.reason, **({"cancellation_requested_at": iso()} if task else {"finished_at": iso()})}, log=False)
+            running=job.get('status') in {'running','cancelling'}
+            await repo.update("jobs", job["id"], {"status": "cancelling" if running else "cancelled",
+                "cancellation_reason": body.reason, **({"cancellation_requested_at": iso()} if running else {"finished_at": iso()})}, log=False)
             if task:
                 task.cancel()
         await audit(ctx, "assessment.cancelled", "assessments", assessment_id, {"reason": body.reason})

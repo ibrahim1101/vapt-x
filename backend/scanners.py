@@ -14,6 +14,7 @@ from pymongo import ReturnDocument
 from core import db, Ctx, clean, iso, audit, sha256_hex
 from repository import Repository
 from importers import finding, parse_report
+from distributed_locks import distributed_lock
 
 JOB_LOCK = asyncio.Lock()
 ACTIVE_CHECKS = {}  # Single-worker managed child tasks, keyed by organization/job.
@@ -256,12 +257,20 @@ async def execution_context(actor):
 async def recover_expired_scan_leases():
     """Mark abandoned running work interrupted; never replay a partially executed scan."""
     now_value=iso()
-    await db.jobs.update_many({'status':'running','_worker_lease_expires_at':{'$lte':now_value}},
-        {'$set':{'status':'interrupted','error':'Worker lease expired; create a new scan to continue.',
-            'finished_at':now_value},'$unset':{'_worker_lease_owner':'','_worker_lease_expires_at':''}})
-    await db.jobs.update_many({'status':'cancelling','_worker_lease_expires_at':{'$lte':now_value}},
-        {'$set':{'status':'cancelled','finished_at':now_value},
-            '$unset':{'_worker_lease_owner':'','_worker_lease_expires_at':''}})
+    cursor=db.jobs.find({'status':{'$in':['running','cancelling']},
+        '_worker_lease_expires_at':{'$lte':now_value}},
+        projection={'_id':1,'org_id':1,'assessment_id':1,'status':1})
+    async for candidate in cursor:
+        scope=f'{candidate.get("org_id","")}:{candidate.get("assessment_id",candidate["_id"])}'
+        async with distributed_lock('scan-state',scope):
+            if candidate['status']=='running':
+                fields={'status':'interrupted','error':'Worker lease expired; create a new scan to continue.',
+                    'finished_at':now_value}
+            else:
+                fields={'status':'cancelled','finished_at':now_value}
+            await db.jobs.update_one({'_id':candidate['_id'],'org_id':candidate.get('org_id'),
+                'status':candidate['status'],'_worker_lease_expires_at':{'$lte':now_value}},
+                {'$set':fields,'$unset':{'_worker_lease_owner':'','_worker_lease_expires_at':''}})
 
 
 async def claim_queued_scan(worker_id):
@@ -318,10 +327,11 @@ async def maintain_scan_lease(job_id,worker_id,task_holder):
 
 async def run_job(ctx, job_id, worker_id=None):
     repo = Repository(ctx)
+    job = await repo.get("jobs", job_id)
     key = (ctx.org_id, job_id)
     lease_task=None
     try:
-        async with JOB_LOCK:
+        async with distributed_lock('scan-state',f'{ctx.org_id}:{job.get("assessment_id",job_id)}'):
             job = await repo.get("jobs", job_id)
             if job["status"] != "queued":
                 return
@@ -370,30 +380,60 @@ async def run_job(ctx, job_id, worker_id=None):
             task_holder={'task':task}
             lease_task=asyncio.create_task(maintain_scan_lease(job_id,worker_id,task_holder)) if worker_id else None
         rows, checks, raw, ip = await task
-        async with JOB_LOCK:
+        async with distributed_lock('scan-state',f'{ctx.org_id}:{job.get("assessment_id",job_id)}'):
             # Cancellation and finding persistence are serialized. A cancelled
             # assessment can never be restored to review by a late result.
             assessment = await repo.get("assessments", job["assessment_id"])
             if assessment.get("status") == "cancelled":
-                await repo.update("jobs", job_id, {"status": "cancelled", "finished_at": iso()}, log=False)
+                if worker_id:
+                    await db.jobs.update_one({'_id':job_id,'org_id':ctx.org_id,
+                        '_worker_lease_owner':worker_id,'status':{'$in':['queued','running','cancelling']}},
+                        {'$set':{'status':'cancelled','finished_at':iso()}})
+                else:
+                    await repo.update("jobs", job_id, {"status": "cancelled", "finished_at": iso()}, log=False)
                 return
+            if worker_id:
+                owned=await db.jobs.find_one({'_id':job_id,'org_id':ctx.org_id,
+                    '_worker_lease_owner':worker_id,'status':'running'})
+                if not owned:return
             count = await store_findings(repo, assessment, asset, job, rows)
-            await repo.update("jobs", job_id, {"status": "completed", "finished_at": iso(), "checks": checks, "finding_count": count, "raw_output": raw, "logs": ["Authorization verified.", f"Connected to pinned address {ip}.", f"Completed {len(checks)} checks. Stored {count} new observations."]}, log=False)
-            await repo.update("assessments", assessment["id"], {"status": "review"}, log=False)
+            fields={"status": "completed", "finished_at": iso(), "checks": checks,
+                "finding_count": count, "raw_output": raw, "logs": ["Authorization verified.",
+                    f"Connected to pinned address {ip}.", f"Completed {len(checks)} checks. Stored {count} new observations."]}
+            if worker_id:
+                saved=await db.jobs.update_one({'_id':job_id,'org_id':ctx.org_id,
+                    '_worker_lease_owner':worker_id,'status':'running'}, {'$set':fields})
+                if saved.matched_count!=1:return
+                await db.assessments.update_one({'_id':assessment['id'],'org_id':ctx.org_id,
+                    'status':{'$ne':'cancelled'}},{'$set':{'status':'review'}})
+            else:
+                await repo.update("jobs", job_id, fields, log=False)
+                await repo.update("assessments", assessment["id"], {"status": "review"}, log=False)
         await audit(ctx, "scan.completed", "jobs", job_id, {"findings": count})
     except asyncio.CancelledError:
-        current = await repo.get("jobs", job_id)
-        status = "cancelled" if current.get("status") == "cancelling" else "interrupted"
-        await repo.update("jobs", job_id, {"status": status, "finished_at": iso()}, log=False)
+        async with distributed_lock('scan-state',f'{ctx.org_id}:{job.get("assessment_id",job_id)}'):
+            current = await repo.get("jobs", job_id)
+            status = "cancelled" if current.get("status") in {"cancelling","cancelled"} else "interrupted"
+            if worker_id:
+                await db.jobs.update_one({'_id':job_id,'org_id':ctx.org_id,'_worker_lease_owner':worker_id,
+                    'status':{'$in':['queued','running','cancelling']}},
+                    {'$set':{'status':status,'finished_at':iso()}})
+            else:
+                await repo.update("jobs", job_id, {"status": status, "finished_at": iso()}, log=False)
         await audit(ctx, "scan." + status, "jobs", job_id)
         if status == "interrupted":
             raise
     except Exception as exc:
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
-        async with JOB_LOCK:
+        async with distributed_lock('scan-state',f'{ctx.org_id}:{job.get("assessment_id",job_id)}'):
             current = await repo.get("jobs", job_id)
             status = "cancelled" if current.get("status") in {"cancelling", "cancelled"} else "failed"
-            await repo.update("jobs", job_id, {"status": status, "error": str(detail)[:1000], "finished_at": iso()}, log=False)
+            if worker_id:
+                await db.jobs.update_one({'_id':job_id,'org_id':ctx.org_id,'_worker_lease_owner':worker_id,
+                    'status':{'$in':['queued','running','cancelling']}},
+                    {'$set':{'status':status,'error':str(detail)[:1000],'finished_at':iso()}})
+            else:
+                await repo.update("jobs", job_id, {"status": status, "error": str(detail)[:1000], "finished_at": iso()}, log=False)
         await audit(ctx, "scan." + status, "jobs", job_id, {"error": str(detail)[:300]})
     finally:
         if lease_task:

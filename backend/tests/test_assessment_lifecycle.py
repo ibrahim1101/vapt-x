@@ -28,6 +28,8 @@ class AssessmentLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.object(scanners,'Repository',return_value=self.repo))
         lock=asyncio.Lock()
         self.enterContext(patch.object(workflow,'JOB_LOCK',lock));self.enterContext(patch.object(scanners,'JOB_LOCK',lock))
+        self.enterContext(patch.object(workflow,'distributed_lock',side_effect=lambda *_args,**_kwargs:lock))
+        self.enterContext(patch.object(scanners,'distributed_lock',side_effect=lambda *_args,**_kwargs:lock))
         self.enterContext(patch.dict(scanners.ACTIVE_CHECKS,{},clear=True))
         self.enterContext(patch.object(workflow,'audit',new_callable=AsyncMock))
         self.enterContext(patch.object(scanners,'audit',new_callable=AsyncMock))
@@ -65,6 +67,13 @@ class AssessmentLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.records['assessments','assessment'],original)
         await scanners.run_job(self.ctx,'job')
         self.scope.assert_not_awaited();self.store.assert_not_awaited()
+
+    async def test_remote_running_worker_receives_durable_cancellation_request(self):
+        self.records['jobs','job']['status']='running'
+        await self.cancel()
+        self.assertEqual(self.records['jobs','job']['status'],'cancelling')
+        self.assertIn('cancellation_requested_at',self.records['jobs','job'])
+        self.assertEqual(self.records['assessments','assessment']['status'],'cancelled')
 
     async def test_retry_preserves_old_assessment_and_creates_separate_draft(self):
         with self.assertRaises(HTTPException):

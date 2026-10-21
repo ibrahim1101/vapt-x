@@ -66,7 +66,7 @@ class QueuedScanAccessTests(unittest.IsolatedAsyncioTestCase):
   import scanners
   ctx=Ctx({'id':'u'},'org','analyst');ctx.membership_id='membership'
   job={'id':'job','project_id':'allowed','status':'queued','scanner':'safe'}
-  with patch.object(scanners,'Repository') as repository,patch.object(scanners,'db') as db,patch.object(scanners,'audit',new_callable=AsyncMock),patch.object(scanners,'safe_checks',new_callable=AsyncMock) as checks:
+  with patch.object(scanners,'Repository') as repository,patch.object(scanners,'db') as db,patch.object(scanners,'audit',new_callable=AsyncMock),patch.object(scanners,'safe_checks',new_callable=AsyncMock) as checks,patch.object(scanners,'distributed_lock',side_effect=lambda *_args,**_kwargs:asyncio.Lock()):
    repository.return_value.get=AsyncMock(return_value=job);repository.return_value.update=AsyncMock()
    db.users.find_one=AsyncMock(return_value={'_id':'u'})
    db.sessions.find_one=AsyncMock(return_value={'credential_version':0})

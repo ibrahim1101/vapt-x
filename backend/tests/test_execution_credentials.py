@@ -1,5 +1,6 @@
 """Queued execution must not outlive revocation of its initiating authority."""
 import unittest
+import asyncio
 from unittest.mock import AsyncMock, patch
 import test_projects
 from core import Ctx
@@ -8,7 +9,7 @@ import scanners
 class ExecutionCredentialTests(unittest.IsolatedAsyncioTestCase):
     async def test_disabled_missing_or_rotated_owner_stops_before_network(self):
         for user in (None, {'disabled': True}, {'credential_version': 2}):
-            with self.subTest(user=user), patch.object(scanners, 'db') as db, patch.object(scanners, 'Repository') as repo, patch.object(scanners, 'audit', new_callable=AsyncMock), patch.object(scanners, 'safe_checks', new_callable=AsyncMock) as checks, patch.object(scanners, 'resolve_public', new_callable=AsyncMock) as resolve:
+            with self.subTest(user=user), patch.object(scanners, 'db') as db, patch.object(scanners, 'Repository') as repo, patch.object(scanners, 'audit', new_callable=AsyncMock), patch.object(scanners, 'safe_checks', new_callable=AsyncMock) as checks, patch.object(scanners, 'resolve_public', new_callable=AsyncMock) as resolve, patch.object(scanners,'distributed_lock',side_effect=lambda *_args,**_kwargs:asyncio.Lock()):
                 db.users.find_one=AsyncMock(return_value=user)
                 repo.return_value.get=AsyncMock(return_value={'status':'queued'})
                 repo.return_value.update=AsyncMock()
