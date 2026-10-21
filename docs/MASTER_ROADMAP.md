@@ -1,6 +1,6 @@
 # VAPT-X engineering roadmap
 
-Updated 2026-10-20. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `1f15da7` passed backend (291 tests with Mongo on Python 3.11/3.12), frontend (109 tests in 34 suites/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Updated 2026-10-21. The existing React/FastAPI/Mongo/Docker application is retained. This roadmap tracks work and evidence, not promised release dates. Current code `22ae652` passed backend (312 tests with Mongo on Python 3.11/3.12), frontend (112 tests in 36 suites/build), Docker and real Nginx Chromium workflows. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Completed increments
 

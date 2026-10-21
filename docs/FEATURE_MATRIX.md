@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 2026-10-21. Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). Custom-role and service-identity increments are in progress through CI verification on the current development branch. This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
+Updated 2026-10-21. Code head `22ae65292fa6c4682ab0758b59f2bc84d92f2644` passed backend on Python 3.11/3.12 (**312 tests each**), frontend (**112 tests in 36 suites plus production build**), Docker smoke and Nginx/Compose Chromium CI: [backend](https://github.com/ibrahim1101/vapt-x/actions/runs/39588413237), [frontend](https://github.com/ibrahim1101/vapt-x/actions/runs/39588413096), [Docker](https://github.com/ibrahim1101/vapt-x/actions/runs/39588413098), [Chromium](https://github.com/ibrahim1101/vapt-x/actions/runs/39588413333). Review: [draft PR #1](https://github.com/ibrahim1101/vapt-x/pull/1). This document describes implemented behavior; passing synthetic tests do not establish production readiness or exhaustive security coverage.
 
 | Area | Implemented and exercised | Remaining limits |
 |---|---|---|
