@@ -73,6 +73,72 @@ class DurableScanQueueTests(unittest.TestCase):
         result=subprocess.run([sys.executable,'-c',code],text=True,capture_output=True,env=os.environ.copy())
         self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
 
+    def test_scan_admission_is_org_wide_across_api_processes(self):
+        code=textwrap.dedent('''
+            import json,os,subprocess,sys,textwrap,uuid
+            from datetime import datetime,timezone,timedelta
+            from pymongo import MongoClient
+            database='vaptx_multiworker_admission_'+uuid.uuid4().hex
+            os.environ.update(MONGO_URL=os.environ['MONGO_TEST_URL'],DB_NAME=database,
+                JWT_SECRET='synthetic-multiworker-admission-'*3,ADMIN_EMAIL='owner@example.com',
+                ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
+                INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINARY='nmap',VAPTX_LOCAL_HTTP='1')
+            mongo=MongoClient(os.environ['MONGO_TEST_URL'])
+            db=mongo[database]
+            now=datetime.now(timezone.utc)
+            db.projects.insert_one({'_id':'visible-project','org_id':'org-one','created_by':'owner','created_at':now.isoformat(),'name':'Visible'})
+            db.scopes.insert_one({'_id':'scope-one','org_id':'org-one','project_id':'visible-project','created_by':'owner',
+                'created_at':now.isoformat(),'host':'training://local','authorized':True,
+                'starts_at':(now-timedelta(minutes=1)).isoformat(),'ends_at':(now+timedelta(hours=1)).isoformat(),
+                'allowed_scanners':['safe']})
+            db.assets.insert_one({'_id':'asset-one','org_id':'org-one','project_id':'visible-project','created_by':'owner',
+                'created_at':now.isoformat(),'scope_id':'scope-one','target':'training://local'})
+            db.assessments.insert_one({'_id':'assessment-one','org_id':'org-one','project_id':'visible-project',
+                'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'draft'})
+            # A member limited to visible-project must still count activity in another project.
+            db.jobs.insert_one({'_id':'hidden-active-job','org_id':'org-one','project_id':'hidden-project',
+                'assessment_id':'hidden-assessment','asset_id':'hidden-asset','created_by':'owner',
+                'created_at':now.isoformat(),'status':'queued','source':'execution','scanner':'safe'})
+            worker_code=textwrap.dedent("""
+                import asyncio,json,os,sys,time
+                from core import Ctx,db
+                from fastapi import HTTPException
+                from workflow import ScanInput,create_scan
+                worker=sys.argv[1]
+                async def run():
+                    await db.multiworker_admission_barrier.insert_one({'_id':worker})
+                    deadline=time.monotonic()+10
+                    while await db.multiworker_admission_barrier.count_documents({})<2:
+                        if time.monotonic()>deadline:raise TimeoutError('peer did not reach admission barrier')
+                        await asyncio.sleep(.02)
+                    ctx=Ctx({'id':worker},'org-one','analyst')
+                    ctx.project_ids=['visible-project']
+                    try:
+                        job=await create_scan(ScanInput(assessment_id='assessment-one',asset_id='asset-one',scanner='safe'),ctx)
+                        return {'status':201,'job_id':job['id']}
+                    except HTTPException as error:return {'status':error.status_code}
+                print(json.dumps(asyncio.run(run())))
+            """)
+            processes=[subprocess.Popen([sys.executable,'-c',worker_code,name],text=True,
+                stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=os.environ.copy()) for name in ('api-a','api-b')]
+            try:
+                results=[]
+                for process in processes:
+                    stdout,stderr=process.communicate(timeout=30)
+                    assert process.returncode==0,stdout+'\\n'+stderr
+                    results.append(json.loads(stdout.strip().splitlines()[-1]))
+                assert sorted(result['status'] for result in results)==[201,429],results
+                assert db.jobs.count_documents({'org_id':'org-one','status':{'$in':['queued','running','cancelling']}})==2
+                created=[result['job_id'] for result in results if result['status']==201]
+                assert len(created)==1 and db.jobs.count_documents({'_id':created[0],'project_id':'visible-project'})==1
+            finally:
+                for process in processes:
+                    if process.poll() is None:process.kill();process.wait()
+                mongo.drop_database(database);mongo.close()
+        ''')
+        result=subprocess.run([sys.executable,'-c',code],text=True,capture_output=True,env=os.environ.copy(),timeout=45)
+        self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
+
     def test_distributed_lease_excludes_contenders_and_rejects_stale_release(self):
         code=textwrap.dedent('''
             import asyncio,os,uuid,subprocess,sys
