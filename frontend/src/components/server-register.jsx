@@ -1,0 +1,14 @@
+import { useEffect,useState } from 'react';
+import { api,errorText } from '../lib/api';
+import { Action,Empty,Field,Select } from './workspace-ui';
+
+// Each register queries the complete matching collection, independent of workspace previews.
+export function ServerRegister({name,endpoint,project,revision,columns,filters=[],searchLabel='Search records',empty}) {
+ const [search,setSearch]=useState(''),[values,setValues]=useState({}),[offset,setOffset]=useState(0),[page,setPage]=useState(null),[error,setError]=useState(''),[retry,setRetry]=useState(0);
+ const filterKey=JSON.stringify(values);
+ useEffect(()=>{setOffset(0);},[project,search,filterKey]);
+ useEffect(()=>{let active=true;setPage(null);setError('');const timer=setTimeout(()=>api.get(endpoint||`/${name}`,{params:{project_id:project||undefined,search,...JSON.parse(filterKey),offset,limit:25}}).then(({data})=>{if(active)setPage(data);}).catch(e=>{if(active)setError(errorText(e));}),200);return()=>{active=false;clearTimeout(timer);};},[name,endpoint,project,search,filterKey,offset,retry,revision]);
+ return <><div className="table-toolbar" style={{flexWrap:'wrap'}}><Field label={searchLabel} name={`${name}-search`} value={search} maxLength={120} onChange={e=>setSearch(e.target.value)}/>{filters.map(filter=><Field key={filter.key} label={filter.label} name={`${name}-${filter.key}`}><Select name={`${name}-${filter.key}`} value={values[filter.key]||''} onChange={e=>setValues(previous=>{const next={...previous};if(e.target.value)next[filter.key]=e.target.value;else delete next[filter.key];return next;})}><option value="">All</option>{filter.options.map(([value,label])=><option key={value} value={value}>{label}</option>)}</Select></Field>)}<Action secondary testId={`${name}-refresh`} onClick={()=>setRetry(v=>v+1)}>Refresh</Action></div>
+ {error?<div role="alert">{error}<Action secondary onClick={()=>setRetry(v=>v+1)}>Retry</Action></div>:!page?<p role="status">Loading records…</p>:<>{page.items.length?<div className="table-scroll" data-testid={`${name}-table`}><table><thead><tr>{columns.map(column=><th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{page.items.map(row=><tr key={row.id} data-testid={`${name}-row-${row.id}`}>{columns.map(column=><td key={column.key} data-label={column.label}>{column.render?column.render(row):row[column.key]}</td>)}</tr>)}</tbody></table></div>:(!search&&filterKey==='{}'&&empty)||<Empty title="No matching records" description="Change the search or filters to inspect other stored records."/>}<div className="table-footer"><span data-testid={`${name}-total`}>{page.total} matching records · {page.items.length?`${offset+1}–${offset+page.items.length}`:'0'} shown</span><div><button data-testid={`${name}-previous`} disabled={!offset} onClick={()=>setOffset(Math.max(0,offset-25))}>Previous</button><button data-testid={`${name}-next`} disabled={!page.has_more} onClick={()=>setOffset(offset+25)}>Next</button></div></div></>}
+ </>;
+}

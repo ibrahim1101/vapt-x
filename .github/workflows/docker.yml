@@ -1,0 +1,79 @@
+name: Docker smoke
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COMPOSE_FILE: compose.local.yml
+      COMPOSE_PROJECT_NAME: vaptx-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      VAPTX_API_PORT: "18001"
+      VAPTX_WEB_PORT: "13000"
+      VAPTX_MONGO_PORT: "27019"
+      VAPTX_INSTALL_AI: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create disposable CI configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          cat > "$RUNNER_TEMP/vaptx-smoke.env" <<'ENV'
+          MONGO_URL=mongodb://mongodb:27017
+          DB_NAME=vaptx_ci_smoke
+          JWT_SECRET=ci-only-synthetic-secret-never-use-outside-tests-123456789
+          ADMIN_EMAIL=smoke@example.com
+          ADMIN_PASSWORD=ci-only-synthetic-password
+          FRONTEND_URL=http://127.0.0.1:13000
+          INTERNAL_API_URL=http://127.0.0.1:8001
+          NMAP_BINARY=nmap
+          VAPTX_LOCAL_HTTP=1
+          MONGO_TIMEOUT_MS=5000
+          ENV
+          cp "$RUNNER_TEMP/vaptx-smoke.env" backend/.env
+      - name: Validate Compose and build API and web images
+        run: |
+          docker compose --profile web config --quiet
+          docker compose --profile web build api web
+      - name: Start MongoDB 7, API and web and wait for health checks
+        run: docker compose --profile web up --detach --wait --wait-timeout 180
+      - name: Verify API and container runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "http://127.0.0.1:${VAPTX_API_PORT}/api/live" | jq --exit-status '.status == "ok" and .service == "VAPT-X"'
+          curl --fail --silent --show-error "http://127.0.0.1:${VAPTX_API_PORT}/api/health" | jq --exit-status '.status == "ok" and .service == "VAPT-X"'
+          docker compose exec -T api python -c 'import os; assert os.getuid() == 10001, "API must run as the unprivileged app user"'
+          docker compose exec -T api python -m pip check
+          docker compose exec -T mongodb mongosh --quiet --eval 'if (db.adminCommand({ping: 1}).ok !== 1) { quit(1); }'
+      - name: Verify frontend, SPA fallback and fixed API proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "http://127.0.0.1:${VAPTX_WEB_PORT}/" > "$RUNNER_TEMP/vaptx-index.html"
+          grep -q '<title>VAPT-X | Security Operations</title>' "$RUNNER_TEMP/vaptx-index.html"
+          curl --fail --silent --show-error "http://127.0.0.1:${VAPTX_WEB_PORT}/workspace/findings" > "$RUNNER_TEMP/vaptx-route.html"
+          cmp "$RUNNER_TEMP/vaptx-index.html" "$RUNNER_TEMP/vaptx-route.html"
+          curl --fail --silent --show-error "http://127.0.0.1:${VAPTX_WEB_PORT}/api/live" | jq --exit-status '.status == "ok" and .service == "VAPT-X"'
+          curl --fail --silent --show-error "http://127.0.0.1:${VAPTX_WEB_PORT}/api/health" | jq --exit-status '.status == "ok" and .service == "VAPT-X"'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${VAPTX_WEB_PORT}/api/not-a-route")" = 404
+          docker compose exec -T web sh -c 'test "$(id -u)" = 101'
+          docker compose exec -T web nginx -t
+      - name: Container diagnostics
+        if: failure()
+        run: |
+          docker compose --profile web ps --all
+          docker compose --profile web logs --no-color --tail 150
+      - name: Remove containers, network, volumes and temporary configuration
+        if: always()
+        shell: bash
+        run: |
+          trap 'rm -f backend/.env "$RUNNER_TEMP/vaptx-smoke.env"' EXIT
+          docker compose --profile web down --volumes --remove-orphans --timeout 20

@@ -1,19 +1,55 @@
 import os
+import re
+from typing import Literal
 import secrets
-from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, EmailStr, Field
+import logging
+import hashlib
+import math
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from pymongo.errors import DuplicateKeyError
+from pymongo import ReturnDocument
 from core import (db, BaseDocument, clean, iso, now, new_id, hash_password, verify_password,
-                  create_access_token, create_refresh_token, decode_token, get_current_user, get_ctx, Ctx, audit, ROLES)
+                  create_access_token, create_refresh_token, decode_token, get_current_user, get_ctx, Ctx, audit, ROLES, PERMS)
+
+from identity_policy import policy,email_verified,allow_registration
+from project_access import metadata as project_access_metadata
+from distributed_locks import LeaseFactory
 
 router = APIRouter(prefix="/api")
+MEMBER_LOCK = LeaseFactory('membership')
+
+
+def membership_lock(org_id):
+    """Allow unit tests to substitute an async lock while production uses Mongo leases."""
+    return MEMBER_LOCK.for_scope(org_id) if isinstance(MEMBER_LOCK,LeaseFactory) else MEMBER_LOCK
 
 
 class Credentials(BaseModel):
     email: EmailStr
     password: str = Field(min_length=10, max_length=72)
     name: str = Field(default="", max_length=100)
+    mfa_code: str = Field(default="", max_length=64)
+    invitation_token: str = Field(default="",max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def bcrypt_byte_limit(cls, value):
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password must not exceed 72 UTF-8 bytes")
+        return value
+
+
+class PasswordChange(BaseModel):
+    mfa_code: str = Field(default="", max_length=64)
+    current_password: str = Field(min_length=10, max_length=72)
+    new_password: str = Field(min_length=10, max_length=72)
+
+    @field_validator("current_password", "new_password")
+    @classmethod
+    def byte_limit(cls, value):
+        return Credentials.bcrypt_byte_limit(value)
 
 
 class OrgInput(BaseModel):
@@ -22,11 +58,12 @@ class OrgInput(BaseModel):
 
 class MemberInput(BaseModel):
     email: EmailStr
-    role: str
+    role: str = Field(min_length=1,max_length=100)
 
 
 def public_user(user):
-    return {k: user.get(k) for k in ("id", "email", "name", "active_org_id", "platform_role")}
+    return {**{k: user.get(k) for k in ("id", "email", "name", "active_org_id", "platform_role")},
+            "email_verified":email_verified(user),"verification_required":policy()["require_verified_email"] and not email_verified(user)}
 
 
 async def insert_identity(collection, fields):
@@ -35,10 +72,33 @@ async def insert_identity(collection, fields):
     return doc.model_dump()
 
 
+async def account_event(user_id, action):
+    # Metadata only. A history outage must not strand an account after credential rotation.
+    try:
+        await insert_identity("account_events", {"user_id":user_id,"action":action,"created_at":iso()})
+    except Exception:
+        logging.getLogger(__name__).warning("Account security history write failed")
+
+
+@router.get("/auth/security-events")
+async def security_events(offset:int=Query(default=0,ge=0,le=1_000_000),
+    limit:int=Query(default=25,ge=1,le=100),user=Depends(get_current_user)):
+    if user.get("_token_scopes") is not None: raise HTTPException(403,"Use a browser session to view account security history")
+    query={"user_id":user["id"]}
+    total=await db.account_events.count_documents(query)
+    rows=await db.account_events.find(query,{"_id":1,"action":1,"created_at":1}).sort(
+        [("created_at",-1),("_id",-1)]).skip(offset).limit(limit).to_list(limit)
+    return {"items":[{"id":str(row["_id"]),"action":row["action"],"created_at":row["created_at"]} for row in rows],
+        "total":total,"offset":offset,"limit":limit,"has_more":offset+len(rows)<total,
+        "notice":"Your account events across organizations. Historical events before this feature are unavailable. History recording is best effort and is not a tamper-proof audit log."}
+
+
 async def seed_admin():
     await db.users.create_index("email", unique=True)
     await db.memberships.create_index([("org_id", 1), ("user_id", 1)], unique=True)
-    await db.auth_attempts.create_index("expires_at", expireAfterSeconds=0)
+    await db.auth_rate_limits.create_index("expires_at", expireAfterSeconds=0)
+    await db.mfa_attempts.create_index("expires_at", expireAfterSeconds=0)
+    await db.account_events.create_index([("user_id",1),("created_at",-1),("_id",-1)])
     email = os.environ["ADMIN_EMAIL"].lower().strip()
     if not await db.users.find_one({"email": email}):
         await insert_identity("users", {"email": email, "name": "Workspace owner", "password_hash": hash_password(os.environ["ADMIN_PASSWORD"]), "platform_role": "platform_admin", "created_at": iso()})
@@ -46,8 +106,9 @@ async def seed_admin():
 
 async def establish_session(user, response):
     sid = new_id()
-    await insert_identity("sessions", {"id": sid, "user_id": user["id"], "revoked": False, "created_at": iso(), "expires_at": iso(now() + timedelta(days=7))})
+    await insert_identity("sessions", {"id": sid, "user_id": user["id"], "credential_version": user.get("credential_version", 0), "revoked": False, "created_at": iso(), "expires_at": iso(now() + timedelta(days=7))})
     set_cookies(response, user["id"], sid)
+    await account_event(user["id"], "session.created")
     return public_user(user)
 
 
@@ -67,8 +128,13 @@ def set_cookies(response, uid, sid):
         response.set_cookie(name, value, httponly=http_only, secure=not local_cookie_mode(), samesite="lax", max_age=age, path="/")
 
 
+@router.get("/auth/policy")
+async def identity_policy():return policy()
+
+
 @router.post("/auth/register")
 async def register(body: Credentials, response: Response):
+    await allow_registration(db,str(body.email).lower(),body.invitation_token)
     try:
         user = await insert_identity("users", {"email": str(body.email).lower(), "name": body.name or "Analyst", "password_hash": hash_password(body.password), "created_at": iso(), "platform_role": None})
     except DuplicateKeyError:
@@ -79,15 +145,39 @@ async def register(body: Credentials, response: Response):
 @router.post("/auth/login")
 async def login(body: Credentials, response: Response):
     email = str(body.email).lower()
-    count = await db.auth_attempts.count_documents({"email": email, "expires_at": {"$gt": now()}})
-    if count >= 10:
-        raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
+    await charge_auth_attempt("login", email)
     doc = await db.users.find_one({"email": email})
-    if not doc or not verify_password(body.password, doc["password_hash"]):
-        await insert_identity("auth_attempts", {"email": email, "expires_at": now() + timedelta(minutes=15)})
+    if not doc or doc.get("disabled") or not verify_password(body.password, doc["password_hash"]):
         raise HTTPException(401, "Invalid email or password")
-    await db.auth_attempts.delete_many({"email": email})
+    if doc.get("mfa_enabled"):
+        from mfa import consume
+        verified = await consume(doc, body.mfa_code)
+        if not verified:
+            raise HTTPException(401, "A valid, unused authenticator or recovery code is required")
+        doc = verified
+        await db.mfa_attempts.delete_one({"_id":str(doc["_id"])})
     return await establish_session(clean(doc), response)
+
+
+async def charge_auth_attempt(action, subject):
+    """Reserve one password check atomically; successes do not reset the budget."""
+    instant = now()
+    window = int(instant.timestamp()) // 900
+    expires = datetime.fromtimestamp((window + 1) * 900, tz=timezone.utc)
+    identity = hashlib.sha256(subject.encode()).hexdigest()
+    query = {"_id": f"{action}:{identity}:{window}"}
+    update = {"$inc": {"count": 1}, "$setOnInsert": {"expires_at": expires}}
+    try:
+        attempt = await db.auth_rate_limits.find_one_and_update(
+            query, update, upsert=True, return_document=ReturnDocument.AFTER)
+    except DuplicateKeyError:
+        # A concurrent first request may win insertion of this unique bucket.
+        attempt = await db.auth_rate_limits.find_one_and_update(
+            query, {"$inc": {"count": 1}}, return_document=ReturnDocument.AFTER)
+    if not attempt or attempt["count"] > 10:
+        retry_after = max(1, math.ceil((expires - instant).total_seconds()))
+        raise HTTPException(429, "Too many attempts. Try again after the current 15-minute window.",
+                            headers={"Retry-After": str(retry_after)})
 
 
 @router.get("/auth/me")
@@ -97,8 +187,18 @@ async def me(user=Depends(get_current_user)):
     for m in memberships:
         org = await db.organizations.find_one({"_id": m["org_id"]})
         if org:
-            orgs.append({"id": str(org["_id"]), "name": org["name"], "role": m["role"]})
-    return {**public_user(user), "organizations": orgs}
+            role_name=m['role'].replace('_',' ')
+            permissions=sorted(PERMS.get(m['role'],set()))
+            if m.get('role')=='custom':
+                from custom_roles import role_permissions
+                role=await db.custom_roles.find_one({'_id':m.get('custom_role_id'),'org_id':str(org['_id']),'active':True})
+                role_name=role.get('name','Unavailable custom role') if role else 'Unavailable custom role'
+                permissions=sorted(await role_permissions(str(org['_id']),m.get('custom_role_id')) or ())
+            orgs.append({"id": str(org["_id"]), "name": org["name"], "role": m["role"],"role_name":role_name,
+                "permissions":permissions,"project_access":project_access_metadata(m)})
+    active=user.get("active_org_id")
+    if active not in {org["id"] for org in orgs}:active=orgs[0]["id"] if orgs else None
+    return {**public_user(user), "active_org_id":active, "organizations": orgs}
 
 
 @router.post("/auth/refresh")
@@ -107,15 +207,20 @@ async def refresh(request: Request, response: Response):
         payload = decode_token(request.cookies.get("refresh_token", ""))
         if payload.get("type") != "refresh":
             raise ValueError()
-        session = await db.sessions.find_one({"_id": payload["sid"], "user_id": payload["sub"], "revoked": False})
+        # Consume the old session in one database operation. A separate read and
+        # revoke lets concurrent requests mint multiple replacement sessions.
+        session = await db.sessions.find_one_and_update(
+            {"_id": payload["sid"], "user_id": payload["sub"], "revoked": False,
+             "expires_at": {"$gt": iso()}},
+            {"$set": {"revoked": True}},
+        )
         if not session:
             raise ValueError()
     except Exception:
         raise HTTPException(401, "Session expired. Sign in again.")
-    await db.sessions.update_one({"_id": payload["sid"]}, {"$set": {"revoked": True}})
     doc = await db.users.find_one({"_id": payload["sub"]})
-    if not doc:
-        raise HTTPException(401, "Account not found")
+    if not doc or doc.get("disabled") or doc.get("credential_version", 0) != session.get("credential_version", 0):
+        raise HTTPException(401, "Session expired. Sign in again.")
     return await establish_session(clean(doc), response)
 
 
@@ -124,7 +229,89 @@ async def logout(response: Response, user=Depends(get_current_user)):
     await db.sessions.update_one({"_id": user["_sid"]}, {"$set": {"revoked": True}})
     for key in ("access_token", "refresh_token", "csrf"):
         response.delete_cookie(key, path="/", secure=not local_cookie_mode(), samesite="lax")
+    await account_event(user["id"], "session.logged_out")
     return {"ok": True}
+
+
+@router.post("/auth/password")
+async def change_password(body: PasswordChange, response: Response, user=Depends(get_current_user)):
+    if user.get("_token_scopes") is not None:
+        raise HTTPException(403, "Use a browser session to change your password")
+    credential = await db.users.find_one({"_id": user["id"]})
+    if not credential or credential.get("credential_version", 0) != user.get("credential_version", 0):
+        raise HTTPException(401, "Credentials changed. Sign in again.")
+    # Independent throttle: a stolen session must not allow unlimited password guesses.
+    await charge_auth_attempt("password-change", user["id"])
+    if not verify_password(body.current_password, credential["password_hash"]):
+        raise HTTPException(403, "Current password is incorrect")
+    if verify_password(body.new_password, credential["password_hash"]):
+        raise HTTPException(422, "Choose a different password")
+    from mfa import consume, version_query
+    if credential.get("mfa_enabled"):
+        credential = await consume(credential, body.mfa_code)
+        if not credential: raise HTTPException(403, "A valid, unused authenticator or recovery code is required")
+    # Compare-and-swap prevents concurrent changes from overwriting one another.
+    # Credential versions also invalidate sessions/tokens minted by in-flight old requests.
+    changed = await db.users.find_one_and_update(
+        {"_id": user["id"], "password_hash": credential["password_hash"], **version_query(credential)},
+        {"$set": {"password_hash": hash_password(body.new_password), "password_changed_at": iso()},
+         "$inc": {"credential_version": 1}}, return_document=ReturnDocument.AFTER)
+    if not changed:
+        raise HTTPException(409, "Credentials changed. Sign in again.")
+    await renew_credentials(changed, response)
+    await account_event(user["id"], "password.changed")
+    return {"ok": True, "notice": "Password changed. Previous sessions and API tokens are invalidated."}
+
+
+async def renew_credentials(document, response):
+    """Epoch invalidation is authoritative even if old requests insert after cleanup."""
+    version = document["credential_version"]
+    uid = str(document["_id"])
+    old_versions = {"$or": [{"credential_version": {"$exists": False}}, {"credential_version": {"$lt": version}}]}
+    await db.sessions.update_many({"user_id": uid, "revoked": False, **old_versions}, {"$set": {"revoked": True}})
+    await db.api_tokens.update_many({"created_by": uid, "revoked": False, **old_versions}, {"$set": {"revoked": True, "revoked_at": iso()}})
+    await establish_session(clean(document), response)
+
+
+@router.get("/auth/sessions")
+async def list_sessions(user=Depends(get_current_user)):
+    records = await db.sessions.find(
+        {"user_id": user["id"], "revoked": False, "expires_at": {"$gt": iso()}},
+        {"_id": 1, "created_at": 1, "expires_at": 1},
+    ).sort([("created_at", -1), ("_id", -1)]).to_list(101)
+    return {"sessions": [
+        {"id": str(row["_id"]), "created_at": row.get("created_at"),
+         "expires_at": row["expires_at"], "current": str(row["_id"]) == user["_sid"]}
+        for row in records[:100]
+    ], "has_more": len(records) > 100}
+
+
+@router.post("/auth/sessions/revoke-others")
+async def revoke_other_sessions(user=Depends(get_current_user)):
+    result = await db.sessions.update_many(
+        {"user_id": user["id"], "_id": {"$ne": user["_sid"]},
+         "revoked": False, "expires_at": {"$gt": iso()}},
+        {"$set": {"revoked": True}},
+    )
+    await account_event(user["id"], "sessions.others_revoked")
+    return {"revoked_count": result.modified_count}
+
+
+@router.post("/auth/sessions/{session_id}/revoke")
+async def revoke_session(session_id: str, response: Response, user=Depends(get_current_user)):
+    session = await db.sessions.find_one_and_update(
+        {"_id": session_id, "user_id": user["id"], "revoked": False,
+         "expires_at": {"$gt": iso()}},
+        {"$set": {"revoked": True}},
+    )
+    if not session:
+        raise HTTPException(404, "Active session not found")
+    current = session_id == user["_sid"]
+    if current:
+        for key in ("access_token", "refresh_token", "csrf"):
+            response.delete_cookie(key, path="/", secure=not local_cookie_mode(), samesite="lax")
+    await account_event(user["id"], "session.revoked")
+    return {"ok": True, "current": current}
 
 
 @router.post("/organizations")
@@ -144,20 +331,111 @@ async def members(ctx=Depends(get_ctx)):
     for m in records:
         u = await db.users.find_one({"_id": m["user_id"]})
         if u:
-            result.append({"id": m["user_id"], "name": u.get("name"), "email": u["email"], "role": m["role"]})
+            role_name=None
+            if m.get('role')=='custom':
+                role=await db.custom_roles.find_one({'_id':m.get('custom_role_id'),'org_id':ctx.org_id,'active':True},{'name':1})
+                role_name=role.get('name','Unavailable custom role') if role else 'Unavailable custom role'
+            result.append({"id": m["user_id"], "name": u.get("name"), "email": u["email"], "role": m["role"],**({'role_name':role_name} if role_name else {}),
+                **({'custom_role_id':m.get('custom_role_id')} if ctx.role=='org_admin' else {}),
+                **({'role_version':m.get('role_version',0)} if ctx.role=='org_admin' else {}),
+                **({"project_access":project_access_metadata(m)} if ctx.role=="org_admin" or m["user_id"]==ctx.uid else {})})
     return result
+
+
+@router.get('/members/directory')
+async def member_directory(search: str = Query(default='',max_length=120),
+    role: Literal['org_admin','security_lead','analyst','auditor','viewer','custom'] | None = None,
+    offset: int = Query(default=0,ge=0,le=1_000_000),limit: int = Query(default=25,ge=1,le=100),ctx=Depends(get_ctx)):
+    ctx.require('read')
+    match = {'org_id':ctx.org_id}
+    if role: match['role'] = role
+    pipeline = [
+        {'$match':match},
+        {'$lookup':{'from':'users','localField':'user_id','foreignField':'_id',
+                    'pipeline':[{'$project':{'name':1,'email':1}}],'as':'account'}},
+        {'$unwind':'$account'},
+    ]
+    if search.strip():
+        pipeline.append({'$match':{'$or':[{key:{'$regex':re.escape(search.strip()),'$options':'i'}}
+                                        for key in ('account.name','account.email')]}})
+    pipeline.append({'$facet':{
+        'count':[{'$count':'total'}],
+        'items':[{'$sort':{'account.email':1,'_id':1}},{'$skip':offset},{'$limit':limit},
+                 {'$project':{'_id':0,'id':'$user_id','name':'$account.name','email':'$account.email','role':1,'custom_role_id':1,'role_version':1,'project_access':1,'project_access_version':1}}],
+    }})
+    rows = await db.memberships.aggregate(pipeline).to_list(1)
+    result = rows[0] if rows else {'count':[],'items':[]}
+    total = result['count'][0]['total'] if result['count'] else 0
+    for member in result['items']:
+        if member['role']=='custom':
+            role=await db.custom_roles.find_one({'_id':member.get('custom_role_id'),'org_id':ctx.org_id,'active':True},{'name':1})
+            member['role_name']=role.get('name','Unavailable custom role') if role else 'Unavailable custom role'
+        if ctx.role=='org_admin' or member['id']==ctx.uid:member['project_access']=project_access_metadata(member)
+        else:member.pop('project_access',None)
+        member.pop('project_access_version',None)
+        if ctx.role!='org_admin':
+            member.pop('custom_role_id',None);member.pop('role_version',None)
+    return {'items':result['items'],'total':total,'offset':offset,'limit':limit,
+            'has_more':offset+len(result['items'])<total}
+
+
+async def live_membership_admin(ctx):
+    ctx.require("members")
+    actor=await db.memberships.find_one({"org_id":ctx.org_id,"user_id":ctx.uid,"role":"org_admin"})
+    if not actor: raise HTTPException(403,"Organization administrator permission changed; reload your workspace")
 
 
 @router.post("/members")
 async def grant_member(body: MemberInput, ctx=Depends(get_ctx)):
     ctx.require("members")
-    if body.role not in ROLES:
-        raise HTTPException(422, "Unknown organization role")
-    user = await db.users.find_one({"email": str(body.email).lower()})
-    if not user:
-        raise HTTPException(404, "User must register before being added")
-    if str(user["_id"]) == ctx.uid and body.role != "org_admin":
-        raise HTTPException(400, "You cannot demote yourself")
-    await db.memberships.update_one({"org_id": ctx.org_id, "user_id": str(user["_id"])}, {"$set": {"role": body.role}, "$setOnInsert": {"_id": new_id()}}, upsert=True)
-    await audit(ctx, "membership.granted", "users", str(user["_id"]), {"role": body.role})
-    return {"ok": True}
+    from custom_roles import resolve_role_choice
+    async with membership_lock(ctx.org_id):
+        await live_membership_admin(ctx)
+        selection=await resolve_role_choice(ctx.org_id,body.role)
+        role=selection['role']
+        user=await db.users.find_one({"email":str(body.email).lower()})
+        if not user: raise HTTPException(404,"User must register before being added")
+        if str(user["_id"])==ctx.uid and role!="org_admin": raise HTTPException(400,"You cannot demote yourself")
+        target=await db.memberships.find_one({"org_id":ctx.org_id,"user_id":str(user["_id"])})
+        if target and target["role"]=="org_admin" and role!="org_admin" and await db.memberships.count_documents({"org_id":ctx.org_id,"role":"org_admin"})<=1:
+            raise HTTPException(409,"An organization must retain an administrator")
+        set_fields={"role":role,**selection,**({"project_access":{"mode":"all","project_ids":[]}} if role=="org_admin" else {})}
+        set_fields['role_version']=(target.get('role_version',0)+1) if target else 1
+        update={"$set":set_fields,"$setOnInsert":{"_id":new_id()}}
+        if role!='custom':update['$unset']={'custom_role_id':''}
+        if target and target["role"]!=role:update['$inc']={'project_access_version':1}
+        await db.memberships.update_one({"org_id":ctx.org_id,"user_id":str(user["_id"])},update,upsert=True)
+        await audit(ctx,"membership.granted","users",str(user["_id"]),{"role":role,**({'custom_role_id':selection['custom_role_id']} if role=='custom' else {})})
+    return {"ok":True}
+
+
+class MemberRemoval(BaseModel):
+    reason:str=Field(min_length=5,max_length=500)
+    @field_validator("reason")
+    @classmethod
+    def meaningful(cls,value):
+        if len(value.strip())<5:raise ValueError("Provide a reason of at least five characters")
+        return value.strip()
+
+
+@router.post("/members/{user_id}/remove")
+async def remove_member(user_id:str,body:MemberRemoval,ctx=Depends(get_ctx)):
+    ctx.require("members")
+    if user_id==ctx.uid:raise HTTPException(409,"You cannot remove your own organization membership")
+    async with membership_lock(ctx.org_id):
+        await live_membership_admin(ctx)
+        membership=await db.memberships.find_one({"org_id":ctx.org_id,"user_id":user_id})
+        if not membership:raise HTTPException(404,"Organization membership not found")
+        if membership["role"]=="org_admin" and await db.memberships.count_documents({"org_id":ctx.org_id,"role":"org_admin"})<=1:
+            raise HTTPException(409,"An organization must retain an administrator")
+        # A retained marker also blocks unbound tokens issued before membership binding existed.
+        # Write it before deletion so a partial cleanup failure cannot revive a legacy token.
+        await db.membership_revocations.update_one({"_id":ctx.org_id+":"+user_id},
+            {"$set":{"removed_at":iso()}},upsert=True)
+        removed=await db.memberships.delete_one({"_id":membership["_id"],"org_id":ctx.org_id,"user_id":user_id})
+        if not removed.deleted_count:raise HTTPException(409,"Membership changed; reload before trying again")
+        await db.api_tokens.update_many({"org_id":ctx.org_id,"created_by":user_id,"revoked":False},
+            {"$set":{"revoked":True,"revoked_at":iso()}})
+        await db.users.update_one({"_id":user_id,"active_org_id":ctx.org_id},{"$set":{"active_org_id":None}})
+        await audit(ctx,"membership.removed","users",user_id,{"reason":body.reason})
+    return {"ok":True,"notice":"Organization access removed and its API tokens revoked. The account and memberships in other organizations are retained. Requests already in progress may finish."}

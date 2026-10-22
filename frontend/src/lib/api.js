@@ -1,32 +1,88 @@
 import axios from 'axios';
+import { apiBaseUrl } from './api-config';
 
-export const api = axios.create({ baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`, withCredentials: true });
-api.interceptors.request.use(config => {
+export const api = axios.create({ baseURL: apiBaseUrl(process.env.REACT_APP_BACKEND_URL), withCredentials: true });
+let credentialGeneration = 0;
+const credentialChanges = new Set();
+const rotatesCredentials = url => /^\/auth\/(?:oidc\/unlink|password|mfa\/(?:confirm|disable|recovery-codes))$/.test(url || '');
+function settleCredentialChange(config, succeeded) {
+  const change = config?._credentialChange;
+  if (!change || change.done) return;
+  change.done = true;
+  credentialChanges.delete(change);
+  if (succeeded) credentialGeneration += 1;
+  change.resolve();
+}
+function prepareRequest(config) {
+  if (config.method?.toLowerCase() === 'post' && rotatesCredentials(config.url) && refreshing) {
+    return refreshing.then(() => prepareRequest(config));
+  }
+  config._credentialGeneration = credentialGeneration;
+  if (config.method?.toLowerCase() === 'post' && rotatesCredentials(config.url)) {
+    const change = { done: false };
+    change.promise = new Promise(resolve => { change.resolve = resolve; });
+    credentialChanges.add(change);
+    config._credentialChange = change;
+  }
   const csrf = document.cookie.split('; ').find(c => c.startsWith('csrf='))?.split('=').slice(1).join('=');
   if (csrf) config.headers['X-CSRF-Token'] = decodeURIComponent(csrf);
   const org = localStorage.getItem('vaptx-org');
   if (org) config.headers['X-Org-Id'] = org;
   return config;
-});
+}
+api.interceptors.request.use(prepareRequest);
 let refreshing;
-api.interceptors.response.use(r => r, async error => {
+api.interceptors.response.use(response => {
+  settleCredentialChange(response.config, true);
+  return response;
+}, async error => {
   const original = error.config;
-  if (error.response?.status === 401 && !original._retried && !original.url.startsWith('/auth/')) {
+  if(error.response?.status===403&&error.response?.data?.detail?.code==='email_verification_required'){window.dispatchEvent(new Event('vaptx-verification-required'));}
+  // A failed rotation must release readers too; its own 401 can then refresh normally.
+  settleCredentialChange(original, false);
+  const retryableUrl = typeof original?.url === 'string' && (
+    !original.url.startsWith('/auth/') || (/^\/auth\/(?:sessions|mfa|password|security-events)(?:\/|\?|$)/.test(original.url) || (/^\/auth\/oidc\/(?:link(?:\/start)?|unlink)$/.test(original.url) || /^\/auth\/email-verification(?:\/request)?$/.test(original.url) || /^\/auth\/invitations(?:\/(?:accept|preview))?$/.test(original.url)))
+  );
+  if (error.response?.status === 401 && retryableUrl && !original._retried) {
     original._retried = true;
+    // A parallel read may be rejected after the old session is revoked but before
+    // the rotation response installs new cookies. Wait before attempting refresh.
+    if (credentialChanges.size) await Promise.all([...credentialChanges].map(change => change.promise));
+    if (original._credentialGeneration !== undefined && original._credentialGeneration !== credentialGeneration) {
+      return api(original);
+    }
     try {
       refreshing = refreshing || api.post('/auth/refresh').finally(() => { refreshing = null; });
       await refreshing;
       return api(original);
-    } catch { window.dispatchEvent(new Event('vaptx-session-expired')); }
+    } catch {
+      if (credentialChanges.size) await Promise.all([...credentialChanges].map(change => change.promise));
+      if (original._credentialGeneration !== undefined && original._credentialGeneration !== credentialGeneration) return api(original);
+      window.dispatchEvent(new Event('vaptx-session-expired'));
+    }
   }
   throw error;
 });
 export const errorText = error => {
   const detail = error.response?.data?.detail;
-  return Array.isArray(detail) ? detail.map(x => x.msg).join('; ') : detail || error.message || 'Request failed';
+  return Array.isArray(detail) ? detail.map(x => x.msg).join('; ') : (detail&&typeof detail==='object'?detail.message:detail) || error.message || 'Request failed';
 };
 export async function download(path, filename) {
-  const response = await api.get(path, { responseType: 'blob' });
+  let response;
+  try {
+    response = await api.get(path, { responseType: 'blob' });
+  } catch (error) {
+    // Axios also wraps JSON error responses in a Blob for downloads.
+    const body = error.response?.data;
+    if (body instanceof Blob && typeof body.text === 'function') {
+      try {
+        error.response.data = JSON.parse(await body.text());
+      } catch {
+        // Preserve the original request error when the body is not JSON.
+      }
+    }
+    throw error;
+  }
   const url = URL.createObjectURL(response.data);
   const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
