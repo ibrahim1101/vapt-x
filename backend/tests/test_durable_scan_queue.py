@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 5492)
-Total output lines: 306
-
 """Mongo-backed checks for atomic durable scan ownership and restart recovery."""
 import os
 import subprocess
@@ -151,7 +148,28 @@ class DurableScanQueueTests(unittest.TestCase):
             os.environ.update(MONGO_URL=os.environ['MONGO_TEST_URL'],DB_NAME=database,
                 JWT_SECRET='synthetic-multiworker-cancel-'*3,ADMIN_EMAIL='owner@example.com',
                 ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
-                INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINAR…492 tokens truncated…':'analyst','kind':'session','session_id':'session-one',
+                INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINARY='nmap',VAPTX_LOCAL_HTTP='1')
+            mongo=MongoClient(os.environ['MONGO_TEST_URL'])
+            db=mongo[database]
+            now=datetime.now(timezone.utc)
+            future=(now+timedelta(minutes=5)).isoformat()
+            expired=(now-timedelta(seconds=1)).isoformat()
+            db.projects.insert_one({'_id':'project-one','org_id':'org-one','created_by':'owner','created_at':now.isoformat(),'name':'Synthetic'})
+            db.scopes.insert_one({'_id':'scope-one','org_id':'org-one','project_id':'project-one','created_by':'owner',
+                'created_at':now.isoformat(),'host':'training://local','authorized':True,
+                'starts_at':(now-timedelta(minutes=1)).isoformat(),'ends_at':future,'allowed_scanners':['safe']})
+            db.assets.insert_one({'_id':'asset-one','org_id':'org-one','project_id':'project-one','created_by':'owner',
+                'created_at':now.isoformat(),'scope_id':'scope-one','target':'training://local'})
+            db.assessments.insert_one({'_id':'assessment-one','org_id':'org-one','project_id':'project-one',
+                'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'draft'})
+            db.assessments.insert_one({'_id':'assessment-success','org_id':'org-one','project_id':'project-one',
+                'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'draft'})
+            db.users.insert_one({'_id':'analyst','name':'Synthetic Analyst','email':'analyst@example.com',
+                'credential_version':0,'disabled':False})
+            db.memberships.insert_one({'_id':'membership-one','org_id':'org-one','user_id':'analyst','role':'analyst',
+                'project_access':{'mode':'selected','project_ids':['project-one']}})
+            db.sessions.insert_one({'_id':'session-one','user_id':'analyst','credential_version':0,'revoked':False,'expires_at':future})
+            actor={'org_id':'org-one','user_id':'analyst','kind':'session','session_id':'session-one',
                 'credential_version':0,'membership_id':'membership-one'}
             db.jobs.insert_one({'_id':'job-one','org_id':'org-one','project_id':'project-one',
                 'assessment_id':'assessment-one','asset_id':'asset-one','created_by':'analyst',
