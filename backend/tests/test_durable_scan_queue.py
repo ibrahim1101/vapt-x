@@ -214,9 +214,9 @@ class DurableScanQueueTests(unittest.TestCase):
                     except urllib.error.HTTPError as error:return error.code,json.loads(error.read())
                 with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
                     results=list(pool.map(request_scan,ports))
-                assert sorted(status for status,_ in results)==[201,429],results
+                assert sorted(status for status,_ in results)==[200,429],results
                 assert db.jobs.count_documents({'org_id':'org-one','status':{'$in':['queued','running','cancelling']}})==2
-                admitted=[body for status,body in results if status==201]
+                admitted=[body for status,body in results if status==200]
                 assert len(admitted)==1 and admitted[0]['project_id']=='visible-project',admitted
             finally:
                 for process in servers:
