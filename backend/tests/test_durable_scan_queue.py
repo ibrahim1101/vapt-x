@@ -162,6 +162,13 @@ class DurableScanQueueTests(unittest.TestCase):
                 'created_at':now.isoformat(),'scope_id':'scope-one','target':'training://local'})
             db.assessments.insert_one({'_id':'assessment-one','org_id':'org-one','project_id':'visible-project',
                 'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'draft'})
+            db.assessments.insert_one({'_id':'assessment-cancel','org_id':'org-one','project_id':'visible-project',
+                'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'running'})
+            db.jobs.insert_one({'_id':'live-cancel-job','org_id':'org-one','project_id':'visible-project',
+                'assessment_id':'assessment-cancel','asset_id':'asset-one','created_by':'owner',
+                'created_at':now.isoformat(),'status':'running','source':'execution','scanner':'safe',
+                '_worker_lease_owner':'synthetic-running-worker',
+                '_worker_lease_expires_at':(now+timedelta(minutes=1)).isoformat()})
             db.jobs.insert_one({'_id':'hidden-active-job','org_id':'org-one','project_id':'hidden-project',
                 'assessment_id':'hidden-assessment','asset_id':'hidden-asset','created_by':'owner',
                 'created_at':now.isoformat(),'status':'running','source':'execution','scanner':'safe',
@@ -209,6 +216,16 @@ class DurableScanQueueTests(unittest.TestCase):
                 recovered=db.jobs.find_one({'_id':'expired-before-api-start'})
                 assert recovered['status']=='interrupted',recovered
                 assert '_worker_lease_owner' not in recovered and '_worker_lease_expires_at' not in recovered,recovered
+                cancel_payload=json.dumps({'reason':'synthetic live API cancellation test'}).encode()
+                cancel_request=urllib.request.Request(f'http://127.0.0.1:{ports[0]}/api/assessments/assessment-cancel/cancel',
+                    data=cancel_payload,headers={'Content-Type':'application/json','Origin':'http://localhost:3000',
+                        'Cookie':'csrf=synthetic-csrf','X-CSRF-Token':'synthetic-csrf'},method='POST')
+                with urllib.request.urlopen(cancel_request,timeout=10) as response:
+                    assert response.status==200
+                cancelled=db.jobs.find_one({'_id':'live-cancel-job'})
+                assert cancelled['status']=='cancelling' and cancelled.get('cancellation_requested_at'),cancelled
+                db.jobs.update_one({'_id':'live-cancel-job','status':'cancelling'},
+                    {'$set':{'status':'cancelled'},'$unset':{'_worker_lease_owner':'','_worker_lease_expires_at':''}})
                 barrier=__import__('threading').Barrier(2)
                 def request_scan(port):
                     payload=json.dumps({'assessment_id':'assessment-one','asset_id':'asset-one','scanner':'safe'}).encode()
