@@ -167,6 +167,11 @@ class DurableScanQueueTests(unittest.TestCase):
                 'created_at':now.isoformat(),'status':'running','source':'execution','scanner':'safe',
                 '_worker_lease_owner':'synthetic-existing-worker',
                 '_worker_lease_expires_at':(now+timedelta(minutes=1)).isoformat()})
+            db.jobs.insert_one({'_id':'expired-before-api-start','org_id':'org-one','project_id':'visible-project',
+                'assessment_id':'assessment-one','asset_id':'asset-one','created_by':'owner',
+                'created_at':now.isoformat(),'status':'running','source':'execution','scanner':'safe',
+                '_worker_lease_owner':'synthetic-abandoned-worker',
+                '_worker_lease_expires_at':(now-timedelta(minutes=1)).isoformat()})
             server_code=textwrap.dedent("""
                 import asyncio,sys,uvicorn
                 import core,server
@@ -201,6 +206,9 @@ class DurableScanQueueTests(unittest.TestCase):
                         except Exception:
                             if time.monotonic()>deadline:raise TimeoutError('API server did not become healthy')
                             time.sleep(.05)
+                recovered=db.jobs.find_one({'_id':'expired-before-api-start'})
+                assert recovered['status']=='interrupted',recovered
+                assert '_worker_lease_owner' not in recovered and '_worker_lease_expires_at' not in recovered,recovered
                 barrier=__import__('threading').Barrier(2)
                 def request_scan(port):
                     payload=json.dumps({'assessment_id':'assessment-one','asset_id':'asset-one','scanner':'safe'}).encode()
