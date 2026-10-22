@@ -141,7 +141,7 @@ class DurableScanQueueTests(unittest.TestCase):
 
     def test_live_api_servers_serialize_scan_admission_over_http(self):
         code=textwrap.dedent('''
-            import concurrent.futures,json,os,socket,subprocess,sys,textwrap,time,urllib.error,urllib.request,uuid
+            import asyncio,concurrent.futures,json,os,socket,subprocess,sys,textwrap,time,urllib.error,urllib.request,uuid
             from datetime import datetime,timezone,timedelta
             from pymongo import MongoClient
             database='vaptx_live_api_admission_'+uuid.uuid4().hex
@@ -150,6 +150,8 @@ class DurableScanQueueTests(unittest.TestCase):
                 ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
                 INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINARY='nmap',VAPTX_LOCAL_HTTP='1')
             mongo=MongoClient(os.environ['MONGO_TEST_URL']);db=mongo[database]
+            from auth import seed_admin
+            asyncio.run(seed_admin())
             now=datetime.now(timezone.utc)
             db.projects.insert_one({'_id':'visible-project','org_id':'org-one','created_by':'owner','created_at':now.isoformat(),'name':'Visible'})
             db.scopes.insert_one({'_id':'scope-one','org_id':'org-one','project_id':'visible-project','created_by':'owner',
