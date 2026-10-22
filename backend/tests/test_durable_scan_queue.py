@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 5492)
+Total output lines: 306
+
 """Mongo-backed checks for atomic durable scan ownership and restart recovery."""
 import os
 import subprocess
@@ -139,7 +142,7 @@ class DurableScanQueueTests(unittest.TestCase):
         result=subprocess.run([sys.executable,'-c',code],text=True,capture_output=True,env=os.environ.copy(),timeout=45)
         self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
 
-    def test_remote_process_cancellation_and_successful_terminal_result(self):
+    def test_remote_process_cancellation_terminal_result_and_recovery(self):
         code=textwrap.dedent('''
             import json,os,subprocess,sys,textwrap,time,uuid
             from datetime import datetime,timezone,timedelta
@@ -148,27 +151,7 @@ class DurableScanQueueTests(unittest.TestCase):
             os.environ.update(MONGO_URL=os.environ['MONGO_TEST_URL'],DB_NAME=database,
                 JWT_SECRET='synthetic-multiworker-cancel-'*3,ADMIN_EMAIL='owner@example.com',
                 ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
-                INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINARY='nmap',VAPTX_LOCAL_HTTP='1')
-            mongo=MongoClient(os.environ['MONGO_TEST_URL'])
-            db=mongo[database]
-            now=datetime.now(timezone.utc)
-            future=(now+timedelta(minutes=5)).isoformat()
-            db.projects.insert_one({'_id':'project-one','org_id':'org-one','created_by':'owner','created_at':now.isoformat(),'name':'Synthetic'})
-            db.scopes.insert_one({'_id':'scope-one','org_id':'org-one','project_id':'project-one','created_by':'owner',
-                'created_at':now.isoformat(),'host':'training://local','authorized':True,
-                'starts_at':(now-timedelta(minutes=1)).isoformat(),'ends_at':future,'allowed_scanners':['safe']})
-            db.assets.insert_one({'_id':'asset-one','org_id':'org-one','project_id':'project-one','created_by':'owner',
-                'created_at':now.isoformat(),'scope_id':'scope-one','target':'training://local'})
-            db.assessments.insert_one({'_id':'assessment-one','org_id':'org-one','project_id':'project-one',
-                'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'draft'})
-            db.assessments.insert_one({'_id':'assessment-success','org_id':'org-one','project_id':'project-one',
-                'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'draft'})
-            db.users.insert_one({'_id':'analyst','name':'Synthetic Analyst','email':'analyst@example.com',
-                'credential_version':0,'disabled':False})
-            db.memberships.insert_one({'_id':'membership-one','org_id':'org-one','user_id':'analyst','role':'analyst',
-                'project_access':{'mode':'selected','project_ids':['project-one']}})
-            db.sessions.insert_one({'_id':'session-one','user_id':'analyst','credential_version':0,'revoked':False,'expires_at':future})
-            actor={'org_id':'org-one','user_id':'analyst','kind':'session','session_id':'session-one',
+                INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINAR…492 tokens truncated…':'analyst','kind':'session','session_id':'session-one',
                 'credential_version':0,'membership_id':'membership-one'}
             db.jobs.insert_one({'_id':'job-one','org_id':'org-one','project_id':'project-one',
                 'assessment_id':'assessment-one','asset_id':'asset-one','created_by':'analyst',
@@ -180,6 +163,10 @@ class DurableScanQueueTests(unittest.TestCase):
                 'created_at':now.isoformat(),'scanner':'safe','source':'execution','status':'queued',
                 '_execution_actor':actor,'_worker_lease_owner':'worker-success',
                 '_worker_lease_expires_at':future})
+            db.jobs.insert_one({'_id':'job-abandoned','org_id':'org-one','project_id':'project-one',
+                'assessment_id':'assessment-abandoned','asset_id':'asset-one','created_by':'analyst',
+                'created_at':now.isoformat(),'scanner':'safe','source':'execution','status':'running',
+                '_worker_lease_owner':'dead-worker','_worker_lease_expires_at':expired})
             child_code=textwrap.dedent("""
                 import asyncio,json,sys
                 from core import Ctx,db
@@ -198,6 +185,10 @@ class DurableScanQueueTests(unittest.TestCase):
                         await scanners.run_job(ctx,job_id,worker_id=worker_id)
                         current=await db.jobs.find_one({'_id':job_id})
                         return {'job_status':current['status']}
+                    if sys.argv[1]=='recover':
+                        await scanners.recover_expired_scan_leases()
+                        current=await db.jobs.find_one({'_id':'job-abandoned'})
+                        return {'job_status':current['status'],'worker_owner':current.get('_worker_lease_owner')}
                     from workflow import ScopeRevocationInput,cancel_assessment
                     ctx=Ctx({'id':'analyst','email':'analyst@example.com'},'org-one','analyst')
                     result=await cancel_assessment('assessment-one',ScopeRevocationInput(reason='Synthetic cross-process cancellation'),ctx)
@@ -229,6 +220,13 @@ class DurableScanQueueTests(unittest.TestCase):
                 assert db.jobs.find_one({'_id':'job-success'})['status']=='completed'
                 assert db.assessments.find_one({'_id':'assessment-success'})['status']=='review'
                 assert db.jobs.find_one({'_id':'job-success'})['finding_count']==0
+                recovered=subprocess.run([sys.executable,'-c',child_code,'recover'],text=True,
+                    capture_output=True,env=os.environ.copy(),timeout=20)
+                assert recovered.returncode==0,recovered.stdout+'\\n'+recovered.stderr
+                assert json.loads(recovered.stdout.strip().splitlines()[-1])=={'job_status':'interrupted','worker_owner':None}
+                abandoned=db.jobs.find_one({'_id':'job-abandoned'})
+                assert abandoned['status']=='interrupted' and '_worker_lease_owner' not in abandoned
+                assert '_worker_lease_expires_at' not in abandoned
             finally:
                 if worker.poll() is None:worker.kill();worker.wait()
                 mongo.drop_database(database);mongo.close()
