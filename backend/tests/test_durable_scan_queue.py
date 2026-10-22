@@ -139,6 +139,94 @@ class DurableScanQueueTests(unittest.TestCase):
         result=subprocess.run([sys.executable,'-c',code],text=True,capture_output=True,env=os.environ.copy(),timeout=45)
         self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
 
+    def test_live_api_servers_serialize_scan_admission_over_http(self):
+        code=textwrap.dedent('''
+            import concurrent.futures,json,os,socket,subprocess,sys,textwrap,time,urllib.error,urllib.request,uuid
+            from datetime import datetime,timezone,timedelta
+            from pymongo import MongoClient
+            database='vaptx_live_api_admission_'+uuid.uuid4().hex
+            os.environ.update(MONGO_URL=os.environ['MONGO_TEST_URL'],DB_NAME=database,
+                JWT_SECRET='synthetic-live-api-admission-'*3,ADMIN_EMAIL='owner@example.com',
+                ADMIN_PASSWORD='synthetic-owner-password',FRONTEND_URL='http://localhost:3000',
+                INTERNAL_API_URL='http://127.0.0.1:8001',NMAP_BINARY='nmap',VAPTX_LOCAL_HTTP='1')
+            mongo=MongoClient(os.environ['MONGO_TEST_URL']);db=mongo[database]
+            now=datetime.now(timezone.utc)
+            db.projects.insert_one({'_id':'visible-project','org_id':'org-one','created_by':'owner','created_at':now.isoformat(),'name':'Visible'})
+            db.scopes.insert_one({'_id':'scope-one','org_id':'org-one','project_id':'visible-project','created_by':'owner',
+                'created_at':now.isoformat(),'host':'training://local','authorized':True,
+                'starts_at':(now-timedelta(minutes=1)).isoformat(),'ends_at':(now+timedelta(hours=1)).isoformat(),
+                'allowed_scanners':['safe']})
+            db.assets.insert_one({'_id':'asset-one','org_id':'org-one','project_id':'visible-project','created_by':'owner',
+                'created_at':now.isoformat(),'scope_id':'scope-one','target':'training://local'})
+            db.assessments.insert_one({'_id':'assessment-one','org_id':'org-one','project_id':'visible-project',
+                'created_by':'owner','created_at':now.isoformat(),'asset_ids':['asset-one'],'status':'draft'})
+            db.jobs.insert_one({'_id':'hidden-active-job','org_id':'org-one','project_id':'hidden-project',
+                'assessment_id':'hidden-assessment','asset_id':'hidden-asset','created_by':'owner',
+                'created_at':now.isoformat(),'status':'running','source':'execution','scanner':'safe',
+                '_worker_lease_owner':'synthetic-existing-worker',
+                '_worker_lease_expires_at':(now+timedelta(minutes=1)).isoformat()})
+            server_code=textwrap.dedent("""
+                import asyncio,sys,uvicorn
+                import core,server
+                from core import Ctx
+                async def fixed_context():
+                    ctx=Ctx({'id':'synthetic-analyst'},'org-one','analyst')
+                    ctx.project_ids=['visible-project']
+                    return ctx
+                async def idle_worker(worker_id):
+                    await asyncio.Event().wait()
+                server.app.dependency_overrides[core.get_ctx]=fixed_context
+                server.scan_worker_loop=idle_worker
+                uvicorn.run(server.app,host='127.0.0.1',port=int(sys.argv[1]),log_level='error')
+            """)
+            servers=[]
+            try:
+                ports=[]
+                for _ in range(2):
+                    with socket.socket() as sock:
+                        sock.bind(('127.0.0.1',0));ports.append(sock.getsockname()[1])
+                for port in ports:
+                    servers.append(subprocess.Popen([sys.executable,'-c',server_code,str(port)],
+                        text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=os.environ.copy()))
+                for port,process in zip(ports,servers):
+                    deadline=time.monotonic()+20
+                    while True:
+                        if process.poll() is not None:
+                            stdout,stderr=process.communicate();raise AssertionError(stdout+'\\n'+stderr)
+                        try:
+                            with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/health',timeout=.5) as response:
+                                if response.status==200:break
+                        except Exception:
+                            if time.monotonic()>deadline:raise TimeoutError('API server did not become healthy')
+                            time.sleep(.05)
+                barrier=__import__('threading').Barrier(2)
+                def request_scan(port):
+                    payload=json.dumps({'assessment_id':'assessment-one','asset_id':'asset-one','scanner':'safe'}).encode()
+                    request=urllib.request.Request(f'http://127.0.0.1:{port}/api/scans',data=payload,
+                        headers={'Content-Type':'application/json','Origin':'http://localhost:3000',
+                            'Cookie':'csrf=synthetic-csrf','X-CSRF-Token':'synthetic-csrf'},method='POST')
+                    barrier.wait(timeout=10)
+                    try:
+                        with urllib.request.urlopen(request,timeout=10) as response:
+                            return response.status,json.loads(response.read())
+                    except urllib.error.HTTPError as error:return error.code,json.loads(error.read())
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                    results=list(pool.map(request_scan,ports))
+                assert sorted(status for status,_ in results)==[201,429],results
+                assert db.jobs.count_documents({'org_id':'org-one','status':{'$in':['queued','running','cancelling']}})==2
+                admitted=[body for status,body in results if status==201]
+                assert len(admitted)==1 and admitted[0]['project_id']=='visible-project',admitted
+            finally:
+                for process in servers:
+                    if process.poll() is None:process.terminate()
+                for process in servers:
+                    try:process.communicate(timeout=10)
+                    except subprocess.TimeoutExpired:process.kill();process.wait()
+                mongo.drop_database(database);mongo.close()
+        ''')
+        result=subprocess.run([sys.executable,'-c',code],text=True,capture_output=True,env=os.environ.copy(),timeout=90)
+        self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
+
     def test_remote_process_cancellation_terminal_result_and_recovery(self):
         code=textwrap.dedent('''
             import json,os,subprocess,sys,textwrap,time,uuid
